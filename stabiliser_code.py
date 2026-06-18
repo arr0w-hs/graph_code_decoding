@@ -1,3 +1,4 @@
+import numpy as np
 from galois import GF2
 import tableau as ta
 import networkx as nx
@@ -7,10 +8,11 @@ from ortools.sat.python import cp_model
 gs = nx.cycle_graph(5)
 n = 4
 k = 1
+g = 1
 
 xlogical = ["X0*Z1"]
 zlogical = ["Z0*Z3"]
-stabi = ["Z0*X1*X2", "Z1*X2*Z3", "X0*Z1*Z2*X3"]
+stabi = ["Z0*X1*Z2", "Z1*X2*Z3", "X0*Z1*Z2*X3"]
 
 previous_meas = ["Z2", "X3"]
 previous_meas = ["X1"]
@@ -23,8 +25,8 @@ previous_meas = [ta.paulistring2tableau(ele, 4) for ele in previous_meas]
 # previous_meas = GF2(previous_meas)
 lost_qubits = ta.paulistring2tableau("Y2", 4)
 
-tab = GF2(stabi)
-T = tab.row_space()
+T = GF2(stabi)
+# T = T.row_space()
 
 
 n, m = T.shape
@@ -65,14 +67,15 @@ for q in range(num_qubits):
     model.Add(sq <= stab_x[q] + stab_z[q])
     support.append(sq)
 
+
 # lost qubits constraints
 raw_L = sum(int(lost_qubits[j]) * mod2_terms[j] for j in range(m))
 max_raw_L = sum(int(lost_qubits[j]) for j in range(m))
 r = model.NewIntVar(0, max_raw_L // 2, "logical_constraint_k")
 model.Add(raw_L == 2 * r)
 
-# measurement constraints
 
+# measurement constraints
 for i, meas in enumerate(previous_meas):
     meas_x = meas[:num_qubits]
     meas_z = meas[num_qubits:]
@@ -84,8 +87,22 @@ for i, meas in enumerate(previous_meas):
         model.Add(raw == 2 * k_comm)
 
 # constraint for g-SPF
-# TODO
 
+zlogi_x = zlogi[:num_qubits]
+zlogi_z = zlogi[num_qubits:]
+anti_terms = []
+for q in range(num_qubits):
+    anit_comm = int(zlogi_z[q]) * stab_x[q] + int(zlogi_x[q]) * stab_z[q]
+
+
+    anti_j = model.NewIntVar(0, 1, f"anti_{j}")
+    k_anti = model.NewIntVar(0, 1, f"k_anti_{j}")
+
+
+    model.Add(anti_j == anit_comm - 2 * k_anti)
+    anti_terms.append(anti_j)
+
+model.Add(sum(anti_terms) <= g)
 
 # objective function
 model.Minimize(sum(support))
@@ -105,3 +122,6 @@ if status in [cp_model.OPTIMAL, cp_model.FEASIBLE]:
     print("support:", [solver.Value(v) for v in support])
     a = [solver.Value(v) for v in mod2_terms]
     print(ta.tableau2paulistring(a))
+    bx_sol = np.array([solver.Value(bx[i]) for i in range(n)], dtype=int)
+    print(bx_sol)
+    print(ta.tableau2paulistring(zlogi))
