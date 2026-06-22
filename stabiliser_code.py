@@ -45,9 +45,15 @@ def tableau_list_to_matrix(tableau:list[list]):
     
     return np.array(tableau)
 
-def find_logical_op_basis(tableau_matrix): #idk if this could be super slow
+def construct_Omega_Matrix(n_qubits): #TODO
+    pass 
+
+
+def find_logical_op_basis(tableau_matrix,n_qubits): #idk if this could be super slow
 
     T = GF2(tableau_matrix)      # numpy array of 0/1
+
+    T=T.dot(construct_Omega_Matrix(n_qubits)) #TODO idk if this dot does what I want
 
     return T.null_space() 
 
