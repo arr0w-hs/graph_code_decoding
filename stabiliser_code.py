@@ -35,6 +35,26 @@ def update_tableau(tableau : list[list], measurements : list):
 
     return tableau
 
+def tableau_list_to_matrix(tableau:list[list]):  
+
+    length = max(map(len, tableau))
+    tableau=[ti+[None]*(length-len(ti)) for ti in tableau]
+
+    if np.isnan(tableau).any():
+        raise ValueError("Tableau does not contain lists of the same lenghts.")
+    
+    return np.array(tableau)
+
+def find_logical_op_basis(tableau_matrix): #idk if this could be super slow
+
+    T = GF2(tableau_matrix)      # numpy array of 0/1
+
+    return T.null_space() 
+
+def append_logical_X_or_Z(tableau_matrix,ker): #appends ONE of the logical operators per logical qubit to tableau
+    pass
+ 
+
 def find_gspf_logical(tableau : list[list], logical: list,
                     other_logical : list,
                     measurements : list[list], lost_qubits : list,
