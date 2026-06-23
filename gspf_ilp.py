@@ -324,8 +324,8 @@ def find_gspf_logical(tableau : list[list], xlogical: list,
         print(ta.tableau2paulistring(x))
         bx_sol = np.array([solver.Value(bx[i]) for i in range(num_stab)], dtype=int)
         bz_sol = np.array([solver.Value(bz[i]) for i in range(num_stab)], dtype=int)
-        print(bx_sol)
-        print(bz_sol)
+        # print(bx_sol)
+        # print(bz_sol)
         # print(ta.tableau2paulistring(zlogical))
 
         return x,z
@@ -334,38 +334,49 @@ def find_gspf_logical(tableau : list[list], xlogical: list,
         return status
 
 
+def create_graph_code(in_adj : np.array, code_node : int = 0):
+
+    num_nodes = in_adj.shape[0]
+    identity = np.identity(num_nodes, dtype = np.uint16)
+    gen = np.hstack([identity, in_adj])
+    zlogi = gen[code_node].copy()
+    zlogi[code_node] = 0
+    neigh = [i for i, ele in enumerate(in_adj[code_node]) if ele ==1]
+
+    assert(len(neigh)>0)
+    xlogi = gen[neigh[0]].copy()
+
+    for ele in neigh[1:]:
+        gen[ele] ^= gen[neigh[0]]
+
+    rows_to_remove = [code_node, neigh[0]]
+    gen = np.delete(gen, rows_to_remove, axis=0)
+
+    gen = np.delete(gen, [code_node, code_node+num_nodes], axis=1)
+    xlogi = np.delete(xlogi, [code_node, code_node+num_nodes])#, axis=1)
+    zlogi = np.delete(zlogi, [code_node, code_node+num_nodes])#, axis=1)
+
+
+    return xlogi, zlogi, gen
+
 
 if __name__ == "__main__":
 
+    numq = 30
+    # g = nx.erdos_renyi_graph(numq, 0.7)
+    g = nx.cycle_graph(numq)
+    g = nx.to_numpy_array(g, dtype = np.uint16)
 
+    xlogi, zlogi, stabi = create_graph_code(g)
 
-    gs = nx.cycle_graph(5)
-    n = 4
-    k = 1
-    gg = 1
-
-    xlogical = ["X0*Z1"]
-    zlogical = ["Z0*Z3"]
-    stabi = ["Z0*X1*Z2", "Z1*X2*Z3", "X0*Z1*Z2*X3"]
+    numq -= 1
+    gg = 3
 
     previous_meas = ["Z2", "X1"]
-    # previous_meas = []
-    xlogi = [ta.paulistring2tableau(ele, 4) for ele in xlogical][0]
-    zlogi = [ta.paulistring2tableau(ele, 4) for ele in zlogical][0]
-    stabi = [ta.paulistring2tableau(ele, 4) for ele in stabi]
-    previous_meas = [ta.paulistring2tableau(ele, 4) for ele in previous_meas]
-
-    # update_tableau(stabi, previous_meas)
-
-    # print(x)
-    # previous_meas = GF2(previous_meas)
-    lost_qubits = ta.paulistring2tableau("Y0", 4)
+    previous_meas = [ta.paulistring2tableau(ele, numq) for ele in previous_meas]
+    lost_qubits = ta.paulistring2tableau("Y0", numq)
 
     T = GF2(stabi)
-    # T = T.row_space()
-    # print((stabi, xlogi, zlogi, previous_meas, lost_qubits))
-
     find_gspf_logical(stabi, xlogi, zlogi, previous_meas, lost_qubits, gg)
-    # find_gspf_logical()
 
     print()
