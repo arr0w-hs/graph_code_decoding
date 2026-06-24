@@ -90,14 +90,14 @@ def pass_to_decoder(T,X_logicals,CSS:bool,logical_qubit:int=0,rounds:int=1,max_i
  
 def main():
 
-    numq = 7
+    numq = 80
     g = nx.erdos_renyi_graph(numq, 0.7)
     #g = nx.cycle_graph(numq)
     g = nx.to_numpy_array(g, dtype = np.uint16)
 
     xlogi, zlogi, stabi = create_graph_code(g)
-    for i in range(stabi.shape[0]):
-        print(tableau2paulistring(stabi[i,:]))
+    #for i in range(stabi.shape[0]):
+        #print(tableau2paulistring(stabi[i,:]))
 
     T=tableau_list_to_matrix(stabi) 
     #X_logicals,Z_logicals,logicals=find_logical_op_basis(T,n_qubits)
