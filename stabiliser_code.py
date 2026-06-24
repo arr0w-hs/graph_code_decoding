@@ -72,6 +72,16 @@ def construct_Omega_Matrix(n_qubits):
 
     return Omega
 
+def rank_F2(M):
+    if not isinstance(M, galois.GF2):
+        raise TypeError("M must be binary matrix of type galois.GF(2)")
+    
+    row_space=M.row_space()
+    rref = row_space.row_reduce()
+    row_space_rank = int(np.any(rref, axis=1).sum())
+
+    return row_space_rank
+
 def find_ker_minus_rowspace(M): #M must be GF2 matrix
     
     if not isinstance(M, galois.GF2):
@@ -79,10 +89,7 @@ def find_ker_minus_rowspace(M): #M must be GF2 matrix
     
     ker=M.null_space()
     row_space=M.row_space()
-
-    rref = row_space.row_reduce()
-    row_space_rank = int(np.any(rref, axis=1).sum())
-
+    row_space_rank=rank_F2(M)
     ker_minus_rowspace=[]
      
     for row in ker:
