@@ -72,9 +72,41 @@ def construct_Omega_Matrix(n_qubits):
 
     return Omega
 
+def compute_Pauli_weight(v):
+
+    
+    if isinstance(v,str):
+        num_qubits=len(v)
+        v=ta.paulistring2tableau(v,num_qubits)
+
+    v = np.asarray(v).ravel()
+    
+    num_qubits=len(v)//2
+    x_part, z_part = v[:num_qubits], v[num_qubits:]
+    touched = (x_part | z_part) 
+    pauli_weight = int(touched.sum())
+
+    return pauli_weight
+
+def y_positions(v):
+
+    if isinstance(v,str):
+        num_qubits=len(v)
+        v=ta.paulistring2tableau(v,num_qubits)
+
+    v = np.asarray(v).ravel()
+    
+    num_qubits=len(v)//2
+    x_part, z_part = v[:num_qubits], v[num_qubits:]
+
+    y_mask = (x_part == 1) & (z_part == 1)
+
+    return y_mask
+
 def rank_F2(M):
+
     if not isinstance(M, galois.GF2):
-        raise TypeError("M must be binary matrix of type galois.GF(2)")
+        M=GF2(M)
     
     row_space=M.row_space()
     rref = row_space.row_reduce()
