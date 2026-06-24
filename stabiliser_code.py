@@ -56,6 +56,9 @@ def append_rows_to_tableau(tableau,row):
     
 def tableau_list_to_matrix(tableau:list[list]):
 
+    if isinstance(tableau,np.ndarray):
+        return tableau
+
     length = max(map(len, tableau))
     tableau=[ti+[None]*(length-len(ti)) for ti in tableau]
 
