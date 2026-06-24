@@ -1,4 +1,5 @@
 import numpy as np
+import galois
 from galois import GF2
 import tableau as ta
 import networkx as nx
@@ -35,30 +36,99 @@ def update_tableau(tableau : GF2, measurements : list):
 
     return tableau
 
+def append_logical_to_tableau(tableau,logical,num_qubits):
+
+    if type(logical)==str:
+        logical=ta.paulistring2tableau(logical,num_qubits)
+    
+    logical=GF2(np.array(logical, dtype=int))
+    tableau=GF2(np.vstack([tableau,logical]))
+
+    return tableau
+
+def append_rows_to_tableau(tableau,row):
+
+    row=GF2(np.array(row, dtype=int))
+    tableau=GF2(np.vstack([tableau,row]))
+
+    return tableau
+
+    
 def tableau_list_to_matrix(tableau:list[list]):
 
     length = max(map(len, tableau))
     tableau=[ti+[None]*(length-len(ti)) for ti in tableau]
 
     if np.isnan(tableau).any():
-        raise ValueError("Tableau does not contain lists of the same lenghts.")
+        raise ValueError("Tableau does not contain lists of the same lengths.")
 
     return np.array(tableau)
 
-def construct_Omega_Matrix(n_qubits): #TODO
-    pass
+def construct_Omega_Matrix(n_qubits):  
+
+    Omega=np.zeros((2*n_qubits,2*n_qubits))
+    Omega[n_qubits:,:n_qubits]=np.eye(n_qubits,n_qubits)
+    Omega[:n_qubits,n_qubits:]=np.eye(n_qubits,n_qubits)
+
+    return Omega
+
+def find_ker_minus_rowspace(M): #M must be GF2 matrix
+    
+    if not isinstance(M, galois.GF2):
+        raise TypeError("M must be binary matrix of type galois.GF(2)")
+    
+    ker=M.null_space()
+    row_space=M.row_space()
+
+    rref = row_space.row_reduce()
+    row_space_rank = int(np.any(rref, axis=1).sum())
+
+    ker_minus_rowspace=[]
+     
+    for row in ker:
+        test = GF2(np.vstack([row_space, row.reshape(1, -1)]))
+        rref_test = test.row_reduce()
+        rank = int(np.any(rref_test, axis=1).sum())
+
+        if rank > row_space_rank:
+            ker_minus_rowspace.append(row)
+
+    return ker_minus_rowspace
+    
 
 
 def find_logical_op_basis(tableau_matrix,n_qubits): #idk if this could be super slow
 
     T = GF2(tableau_matrix)      # numpy array of 0/1
 
-    T=T.dot(construct_Omega_Matrix(n_qubits)) #TODO idk if this dot does what I want
+    is_CSS = np.all(tableau_matrix[:n_qubits, n_qubits:] == 0) and np.all(tableau_matrix[n_qubits:, :n_qubits] == 0)
 
-    return T.null_space()
+    if is_CSS: #convention: T=((H_x,0),(0,H_z))
+        T_x=T[:n_qubits,:n_qubits]
+        T_z= T[n_qubits:,n_qubits:]
+        Z_logicals=find_ker_minus_rowspace(T_x)
+        X_logicals=find_ker_minus_rowspace(T_z)
+        n_zeros= GF2(np.zeros(n_qubits, dtype=int))
 
-def append_logical_X_or_Z(tableau_matrix,ker): #appends ONE of the logical operators per logical qubit to tableau
-    pass
+        for i in range(len(Z_logicals)):
+            Z_logicals[i]=np.hstack([n_zeros, Z_logicals[i]])
+
+        for i in range(len(X_logicals)):
+            X_logicals[i]=np.hstack([X_logicals[i], n_zeros])  # X logicals get zeros on the Z side
+
+        return X_logicals,Z_logicals,None
+          
+            
+    else:
+
+        T=T.dot(GF2(construct_Omega_Matrix(n_qubits)))  
+        logicals=find_ker_minus_rowspace(T)
+
+        return None,None,logicals
+
+
+    
+ 
 
 def main():
     return
