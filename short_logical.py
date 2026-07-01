@@ -1,7 +1,5 @@
 import numpy as np
-from stabiliser_code import update_tableau,append_rows_to_tableau,\
-find_logical_op_basis,append_logical_to_tableau,tableau_list_to_matrix,rank_F2,construct_Omega_Matrix,\
-compute_Pauli_weight,y_positions
+from stabiliser_code import  *
 from ldpc import BpDecoder,BpOsdDecoder
 from galois import GF2
 import networkx as nx
@@ -10,9 +8,9 @@ from gspf_ilp import create_graph_code
 from tableau import tableau2paulistring
 
 
-def pass_to_decoder(T,X_logicals,CSS:bool,logical_qubit:int=0,rounds:int=1,max_iter:int=100):#T with logical X appended. So far only works for CSS codes
+def pass_to_decoder(T,X_logicals,lost_qubits:list,CSS:bool,logical_qubits:list=[0],rounds:int=1,max_iter:int=100):#T with logical X appended. So far only works for CSS codes
     #assumes T is already in its reduced form! Full rank!
-    """logical_qubit is 0-indexed"""
+    
     #finds a short X operator 
     if rank_F2(T)<T.shape[0]:
 
@@ -38,11 +36,12 @@ def pass_to_decoder(T,X_logicals,CSS:bool,logical_qubit:int=0,rounds:int=1,max_i
         T=T[:num_gen_x,:n_qubits]
         num_gen=num_gen_x
 
- 
+
     H=append_rows_to_tableau(T,X_logicals)
     
     syndrome = np.zeros(H.shape[0], dtype=int)
-    syndrome[num_gen + logical_qubit] = 1  # 1 at the logical qubit's row, after the stabilizer rows
+    for k in logical_qubits:
+        syndrome[num_gen + k] = 1  # 1 at the logical qubit's row, after the stabilizer rows
 
     syndrome_1d = syndrome.flatten()
 
@@ -63,6 +62,10 @@ def pass_to_decoder(T,X_logicals,CSS:bool,logical_qubit:int=0,rounds:int=1,max_i
         best = None
         best_weight = np.inf
 
+        lost = np.asarray(lost_qubits)
+        channel_probs[lost] = 0
+        channel_probs[lost + n_qubits] = 0
+
         for _ in range(rounds):
 
             decoder = BpOsdDecoder(H_eff, channel_probs=channel_probs,
@@ -80,7 +83,7 @@ def pass_to_decoder(T,X_logicals,CSS:bool,logical_qubit:int=0,rounds:int=1,max_i
                 best = result.copy()
             
             y_mask = y_positions(result)
-            channel_probs[:n_qubits][y_mask] = np.minimum(channel_probs[:n_qubits][y_mask] * 2, 0.49) 
+            channel_probs[:n_qubits][y_mask] = np.minimum(channel_probs[:n_qubits][y_mask] * 2, 0.49) #doubling the old probability
             channel_probs[n_qubits:][y_mask] = np.minimum(channel_probs[n_qubits:][y_mask] * 2, 0.49)
  
         result=best
@@ -101,8 +104,8 @@ def main():
 
     T=tableau_list_to_matrix(stabi) 
     #X_logicals,Z_logicals,logicals=find_logical_op_basis(T,n_qubits)
-
-    short_z=pass_to_decoder(T,xlogi,False,rounds=18,max_iter=100)
+    lost_qubits=[0,1]
+    short_z=pass_to_decoder(T,xlogi,lost_qubits,False,rounds=18,max_iter=100)
     print('logical: ',tableau2paulistring(short_z))
     return short_z
 

@@ -3,6 +3,8 @@ import galois
 from galois import GF2
 import tableau as ta
 import networkx as nx
+from itertools import product
+from gspf_ilp import create_graph_code
 
 from ortools.sat.python import cp_model
 
@@ -117,12 +119,18 @@ def rank_F2(M):
 
     return row_space_rank
 
-def find_ker_minus_rowspace(M): #M must be GF2 matrix
-    
+def find_ker_minus_rowspace(M,CSS:bool=False): #M must be GF2 matrix
+    M=to_gf2_tableau(M)
+
     if not isinstance(M, galois.GF2):
         raise TypeError("M must be binary matrix of type galois.GF(2)")
     
-    ker=M.null_space()
+    if CSS:
+        ker=M.null_space()
+    else:
+        num_qubits=M.shape[1]//2
+        ker=(M@construct_Omega_Matrix(num_qubits)).null_space()
+
     row_space=M.row_space()
     row_space_rank=rank_F2(M)
     ker_minus_rowspace=[]
@@ -136,7 +144,104 @@ def find_ker_minus_rowspace(M): #M must be GF2 matrix
             ker_minus_rowspace.append(row)
 
     return ker_minus_rowspace
+
+def to_gf2_tableau(T):
+ 
+    if isinstance(T, galois.FieldArray):
+        return T
+
+     
+    if isinstance(T, list):
+        T = tableau_list_to_matrix(T)
+        return GF2(np.asarray(T).astype(np.int64))
+
     
+    if isinstance(T, np.ndarray):
+        return GF2(T.astype(np.int64))
+
+    raise TypeError(f"unsupported type for T: {type(T)}")
+
+
+def overlap_with_lost_qubits(T,lost_qubits):
+
+    T=to_gf2_tableau(T)
+    num_qubits=T.shape[1]//2
+    x_touch = T[:, lost_qubits].any(axis=1)               # X part of lost qubits
+    z_touch = T[:, np.asarray(lost_qubits) + num_qubits].any(axis=1)    # Z part of lost qubits
+    touches_lost = x_touch | z_touch 
+    keep_rows=~touches_lost
+
+    return touches_lost,keep_rows
+
+    
+def remove_lost_qubits_from_tableau(T,lost_qubits:list,CSS:bool=False): 
+    #TODO: implement for CSS
+    T=to_gf2_tableau(T)      
+    num_qubits=T.shape[1]//2 
+    lost = np.asarray(lost_qubits)
+    lost_cols = np.concatenate([lost, lost + num_qubits])   # X and Z halves
+    T_columns_lost_qubits=T[:,lost_cols]
+    coeffs=T_columns_lost_qubits.left_null_space() #note the left null space!
+
+    return coeffs@T
+
+def find_clean_logical(T, logi, lost_qubits):
+
+    """Return logi multiplied by stabilizers so it has no support on lost_qubits.
+    T:    (num_gen, 2n) GF2 stabilizer generators
+    logi: (2n,) GF2 logical operator
+    Returns cleaned logical (2n,) GF2, or None if it can't be cleaned."""
+    T = to_gf2_tableau(T)
+    logi = GF2(logi) if not isinstance(logi, galois.FieldArray) else logi
+
+    n_qubits = T.shape[1] // 2
+    lost = np.asarray(lost_qubits)
+    lost_cols = np.concatenate([lost, lost + n_qubits])   # X and Z halves
+
+    A = T[:, lost_cols]        # (num_gen, |lost_cols|) — stabilizers on lost qubits
+    b = logi[lost_cols]        # (|lost_cols|,)          — logical on lost qubits
+
+    
+    c = solve_gf2(A.T, b)
+    if c is None:
+        return None            # not correctable: no clean representative exists
+
+    logi_clean = logi + c @ T   
+
+    return logi_clean
+
+def solve_gf2(M, b):
+    """Any x with M x = b over GF(2), or None if inconsistent."""
+    M = GF2(M); b = GF2(b).reshape(-1, 1)
+    R = GF2(np.hstack([M, b])).row_reduce()
+    k = M.shape[1]
+    x = GF2(np.zeros(k, dtype=int))
+    for row in R:
+        rowM, rhs = row[:k], row[k]
+        if not rowM.any():
+            if rhs:
+                return None            # 0 = 1, inconsistent
+            continue
+        pivot = int(np.argmax(rowM.view(np.ndarray)))
+        x[pivot] = rhs
+    return x
+
+def kick_out_qubits(T,qubits):
+
+    T=to_gf2_tableau(T)
+
+    n_qubits = T.shape[1] // 2
+
+    lost = np.asarray(qubits)
+    
+    lost_cols = np.concatenate([lost, lost + n_qubits])   # X and Z halves
+
+    keep_cols = np.setdiff1d(np.arange(T.shape[1]), lost_cols)
+
+    T_reduced = T[:, keep_cols]
+
+    return T_reduced
+
 
 
 def find_logical_op_basis(tableau_matrix,n_qubits): #idk if this could be super slow
@@ -148,8 +253,8 @@ def find_logical_op_basis(tableau_matrix,n_qubits): #idk if this could be super 
     if is_CSS: #convention: T=((H_x,0),(0,H_z))
         T_x=T[:n_qubits,:n_qubits]
         T_z= T[n_qubits:,n_qubits:]
-        Z_logicals=find_ker_minus_rowspace(T_x)
-        X_logicals=find_ker_minus_rowspace(T_z)
+        Z_logicals=find_ker_minus_rowspace(T_x,CSS=is_CSS)
+        X_logicals=find_ker_minus_rowspace(T_z,CSS=is_CSS)
         n_zeros= GF2(np.zeros(n_qubits, dtype=int))
 
         for i in range(len(Z_logicals)):
@@ -163,8 +268,8 @@ def find_logical_op_basis(tableau_matrix,n_qubits): #idk if this could be super 
             
     else:
 
-        T=T.dot(GF2(construct_Omega_Matrix(n_qubits)))  
-        logicals=find_ker_minus_rowspace(T)
+           
+        logicals=find_ker_minus_rowspace(T,CSS=is_CSS) #TODO check if working correctly
 
         return None,None,logicals
 
@@ -173,8 +278,27 @@ def find_logical_op_basis(tableau_matrix,n_qubits): #idk if this could be super 
  
 
 def main():
-    return
 
+    
+    nodes=20
+    numq=nodes-1
+    g = nx.erdos_renyi_graph(numq, 0.7)
+    #g = nx.cycle_graph(numq)
+    g = nx.to_numpy_array(g, dtype = np.uint16)
+
+    xlogi, zlogi, stabi = create_graph_code(g)
+    print(len(zlogi))
+    #for i in range(stabi.shape[0]):
+        #print(tableau2paulistring(stabi[i,:]))
+
+    T=tableau_list_to_matrix(stabi) 
+    #X_logicals,Z_logicals,logicals=find_logical_op_basis(T,n_qubits)
+    lost_qubits=[0,1]
+
+    T_new=remove_lost_qubits_from_tableau(T,lost_qubits)
+    print(T_new)
+    zlogi_new=find_clean_logical(T,xlogi,lost_qubits)
+    print(zlogi_new)
 if __name__ == "__main__":
 
     main()
