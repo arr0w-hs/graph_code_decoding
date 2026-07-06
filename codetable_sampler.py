@@ -4,6 +4,7 @@ import requests
 import numpy as np
 from bs4 import BeautifulSoup
 
+# from chatgpt
 
 def prime_from_q(q: int) -> int:
     """
@@ -96,15 +97,23 @@ def check_stabilizer_commutes(Hx, Hz, q: int = 4) -> bool:
 
     return np.all(symp == 0)
 
+if __name__ == "__main__":
 
-# Example: [[34,4,10]] over GF(3^2), so q=9 and p=3
-html = fetch_codetables_qecc(n=16, k=1, q=4)
+  from stabiliser_code import find_logical_op_basis
+  from galois import GF2
 
-Hx, Hz, H = extract_stabilizer_matrix(html, n=16, q=4)
+  # Example: [[34,4,10]] over GF(3^2), so q=9 and p=3
+  html = fetch_codetables_qecc(n=16, k=1, q=4)
 
-print("Hx shape:", Hx.shape)
-print("Hz shape:", Hz.shape)
-print("H shape :", H.shape)
-print("commutes:", check_stabilizer_commutes(Hx, Hz, q=4))
+  Hx, Hz, H = extract_stabilizer_matrix(html, n=16, q=4)
 
-print(H)
+  print("Hx shape:", Hx.shape)
+  print("Hz shape:", Hz.shape)
+  print("H shape :", H.shape)
+  print("commutes:", check_stabilizer_commutes(Hx, Hz, q=4))
+
+  print(H)
+  H = GF2(H)
+
+  a = find_logical_op_basis(H, 16)
+  print(a)
