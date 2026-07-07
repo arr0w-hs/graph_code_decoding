@@ -42,7 +42,7 @@ def append_logical_to_tableau(tableau,logical,num_qubits):
 
     if type(logical)==str:
         logical=ta.paulistring2tableau(logical,num_qubits)
-    
+
     logical=GF2(np.array(logical, dtype=int))
     tableau=GF2(np.vstack([tableau,logical]))
 
@@ -55,7 +55,7 @@ def append_rows_to_tableau(tableau,row):
 
     return tableau
 
-    
+
 def tableau_list_to_matrix(tableau:list[list]):
 
     if isinstance(tableau,np.ndarray):
@@ -69,7 +69,7 @@ def tableau_list_to_matrix(tableau:list[list]):
 
     return np.array(tableau)
 
-def construct_Omega_Matrix(n_qubits):  
+def construct_Omega_Matrix(n_qubits):
 
     Omega=np.zeros((2*n_qubits,2*n_qubits))
     Omega[n_qubits:,:n_qubits]=np.eye(n_qubits,n_qubits)
@@ -79,16 +79,16 @@ def construct_Omega_Matrix(n_qubits):
 
 def compute_Pauli_weight(v):
 
-    
+
     if isinstance(v,str):
         num_qubits=len(v)
         v=ta.paulistring2tableau(v,num_qubits)
 
     v = np.asarray(v).ravel()
-    
+
     num_qubits=len(v)//2
     x_part, z_part = v[:num_qubits], v[num_qubits:]
-    touched = (x_part | z_part) 
+    touched = (x_part | z_part)
     pauli_weight = int(touched.sum())
 
     return pauli_weight
@@ -100,7 +100,7 @@ def y_positions(v):
         v=ta.paulistring2tableau(v,num_qubits)
 
     v = np.asarray(v).ravel()
-    
+
     num_qubits=len(v)//2
     x_part, z_part = v[:num_qubits], v[num_qubits:]
 
@@ -112,7 +112,7 @@ def rank_F2(M):
 
     if not isinstance(M, galois.GF2):
         M=GF2(M)
-    
+
     row_space=M.row_space()
     rref = row_space.row_reduce()
     row_space_rank = int(np.any(rref, axis=1).sum())
@@ -124,7 +124,7 @@ def find_ker_minus_rowspace(M,CSS:bool=False): #M must be GF2 matrix
 
     if not isinstance(M, galois.GF2):
         raise TypeError("M must be binary matrix of type galois.GF(2)")
-    
+
     if CSS:
         ker=M.null_space()
     else:
@@ -134,7 +134,7 @@ def find_ker_minus_rowspace(M,CSS:bool=False): #M must be GF2 matrix
     row_space=M.row_space()
     row_space_rank=rank_F2(M)
     ker_minus_rowspace=[]
-     
+
     for row in ker:
         test = GF2(np.vstack([row_space, row.reshape(1, -1)]))
         rref_test = test.row_reduce()
@@ -146,16 +146,16 @@ def find_ker_minus_rowspace(M,CSS:bool=False): #M must be GF2 matrix
     return ker_minus_rowspace
 
 def to_gf2_tableau(T):
- 
+
     if isinstance(T, galois.FieldArray):
         return T
 
-     
+
     if isinstance(T, list):
         T = tableau_list_to_matrix(T)
         return GF2(np.asarray(T).astype(np.int64))
 
-    
+
     if isinstance(T, np.ndarray):
         return GF2(T.astype(np.int64))
 
@@ -168,16 +168,16 @@ def overlap_with_lost_qubits(T,lost_qubits):
     num_qubits=T.shape[1]//2
     x_touch = T[:, lost_qubits].any(axis=1)               # X part of lost qubits
     z_touch = T[:, np.asarray(lost_qubits) + num_qubits].any(axis=1)    # Z part of lost qubits
-    touches_lost = x_touch | z_touch 
+    touches_lost = x_touch | z_touch
     keep_rows=~touches_lost
 
     return touches_lost,keep_rows
 
-    
-def remove_lost_qubits_from_tableau(T,lost_qubits:list,CSS:bool=False): 
+
+def remove_lost_qubits_from_tableau(T,lost_qubits:list,CSS:bool=False):
     #TODO: implement for CSS
-    T=to_gf2_tableau(T)      
-    num_qubits=T.shape[1]//2 
+    T=to_gf2_tableau(T)
+    num_qubits=T.shape[1]//2
     lost = np.asarray(lost_qubits)
     lost_cols = np.concatenate([lost, lost + num_qubits])   # X and Z halves
     T_columns_lost_qubits=T[:,lost_cols]
@@ -201,12 +201,12 @@ def find_clean_logical(T, logi, lost_qubits):
     A = T[:, lost_cols]        # (num_gen, |lost_cols|) — stabilizers on lost qubits
     b = logi[lost_cols]        # (|lost_cols|,)          — logical on lost qubits
 
-    
+
     c = solve_gf2(A.T, b)
     if c is None:
         return None            # not correctable: no clean representative exists
 
-    logi_clean = logi + c @ T   
+    logi_clean = logi + c @ T
 
     return logi_clean
 
@@ -233,7 +233,7 @@ def kick_out_qubits(T,qubits):
     n_qubits = T.shape[1] // 2
 
     lost = np.asarray(qubits)
-    
+
     lost_cols = np.concatenate([lost, lost + n_qubits])   # X and Z halves
 
     keep_cols = np.setdiff1d(np.arange(T.shape[1]), lost_cols)
@@ -264,41 +264,44 @@ def find_logical_op_basis(tableau_matrix,n_qubits): #idk if this could be super 
             X_logicals[i]=np.hstack([X_logicals[i], n_zeros])  # X logicals get zeros on the Z side
 
         return X_logicals,Z_logicals,None
-          
-            
+
+
     else:
 
-           
+
         logicals=find_ker_minus_rowspace(T,CSS=is_CSS) #TODO check if working correctly
 
         return None,None,logicals
 
 
-    
- 
+
+
 
 def main():
 
-    
-    nodes=20
+
+    nodes=7
     numq=nodes-1
     g = nx.erdos_renyi_graph(numq, 0.7)
     #g = nx.cycle_graph(numq)
     g = nx.to_numpy_array(g, dtype = np.uint16)
 
     xlogi, zlogi, stabi = create_graph_code(g)
-    print(len(zlogi))
+    print(ta.tableau2paulistring(xlogi))
+    # print(len(zlogi))
     #for i in range(stabi.shape[0]):
         #print(tableau2paulistring(stabi[i,:]))
 
-    T=tableau_list_to_matrix(stabi) 
+    T=tableau_list_to_matrix(stabi)
     #X_logicals,Z_logicals,logicals=find_logical_op_basis(T,n_qubits)
     lost_qubits=[0,1]
 
     T_new=remove_lost_qubits_from_tableau(T,lost_qubits)
-    print(T_new)
+    # print(T_new)
     zlogi_new=find_clean_logical(T,xlogi,lost_qubits)
-    print(zlogi_new)
+    if zlogi_new is not None:
+        print(ta.tableau2paulistring(zlogi_new))
+
 if __name__ == "__main__":
 
     main()

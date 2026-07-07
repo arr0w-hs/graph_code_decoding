@@ -362,7 +362,7 @@ def create_graph_code(in_adj : np.array, code_node : int = 0):
 
 if __name__ == "__main__":
 
-    numq = 30
+    numq = 7
     g = nx.erdos_renyi_graph(numq, 0.7)
     # g = nx.cycle_graph(numq)
     g = nx.to_numpy_array(g, dtype = np.uint16)
@@ -372,16 +372,18 @@ if __name__ == "__main__":
     numq -= 1
     gg = 1
 
-    previous_meas = ["Z2", "X1"]
+    previous_meas = ["Z1*Z2", "X1*X2"]
     previous_meas = [ta.paulistring2tableau(ele, numq) for ele in previous_meas]
+    print(previous_meas)
 
-    lost_qubits = np.random.randint(0, numq, numq//3)
+    lost_qubits = np.unique(np.random.randint(0, numq, numq//4))
+    lost_qubits = []
     s = str()
     for ele in lost_qubits:
         s += "Y"+str(ele)+"*"
     s = s[:-1]
     print(s)
-    lost_qubits = ta.paulistring2tableau("Y0", numq)
+    # lost_qubits = ta.paulistring2tableau("Y0", numq)
     lost_qubits = ta.paulistring2tableau(s, numq)
 
 

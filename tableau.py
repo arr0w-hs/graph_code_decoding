@@ -63,7 +63,10 @@ def qubit_wise_commutation(a1, a2):
 def paulistring2tableau(pauli_str, num_qubits):
 
     tab = [0]*2*num_qubits
-    pauli_str = pauli_str.split(sep = "*")
+    if len(pauli_str) >0:
+        pauli_str = pauli_str.split(sep = "*")
+    else:
+        pauli_str = []
 
     for stab, *a in pauli_str:
         loc = str()
