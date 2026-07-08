@@ -1,6 +1,6 @@
 import numpy as np
 import stabiliser_code as sc
-from ldpc import BpDecoder,BpOsdDecoder
+from ldpc import BpDecoder, BpOsdDecoder
 from galois import GF2
 import networkx as nx
 import galois
@@ -93,7 +93,7 @@ def pass_to_decoder(T,X_logicals,lost_qubits:list,CSS:bool,logical_qubits:list=[
 
 def main():
 
-    numq = 80
+    numq = 16
     g = nx.erdos_renyi_graph(numq, 0.7)
     #g = nx.cycle_graph(numq)
     g = nx.to_numpy_array(g, dtype = np.uint16)
@@ -106,7 +106,8 @@ def main():
     #X_logicals,Z_logicals,logicals=find_logical_op_basis(T,n_qubits)
     lost_qubits=[0,1]
     short_z=pass_to_decoder(T,xlogi,lost_qubits,False,rounds=18,max_iter=100)
-    print('logical: ',tableau2paulistring(short_z))
+    print('zlogical: ',tableau2paulistring(short_z))
+    print('xlogical: ',tableau2paulistring(xlogi))
     return short_z
 
 
