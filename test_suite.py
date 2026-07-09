@@ -37,6 +37,7 @@ def stabiliser_logical_commutation_check(stab_tableau : list[list], logical):
     print("Stabiliser logical commutation test complete.", "\n")
     return
 
+
 def x_and_z_logical_anticommutation(x_logi, z_logi):
 
     print("X logical =", ta.tableau2paulistring(x_logi))
@@ -73,6 +74,7 @@ def lost_qubit_logical_overlap(logical, lost_qubits):
 
     return
 
+
 def logical_commute_with_measurement(logical, measurement):
 
     if ta.commutation_check(logical, measurement):
@@ -81,6 +83,9 @@ def logical_commute_with_measurement(logical, measurement):
         print("Logical does not commute with the measurements")
 
 
+def test_gspf():
+
+    return
 
 if __name__ == "__main__":
     from gspf_ilp import create_graph_code
@@ -110,10 +115,10 @@ if __name__ == "__main__":
         # print(type(zlogi_new))
         # print(ta.tableau2paulistring(zlogi_new))
 
-        # x_and_z_logical_anticommutation(xlogi, zlogi_new)
-        # x_and_z_logical_anticommutation(xlogi, zlogi)
+        x_and_z_logical_anticommutation(xlogi, zlogi_new)
+        x_and_z_logical_anticommutation(xlogi, zlogi)
 
         # stabiliser_logical_commutation_check(np.asarray(T_new), zlogi)
 
-        lost_qubit_logical_overlap(zlogi_new, lq)
-        lost_qubit_logical_overlap(zlogi, lq)
+        # lost_qubit_logical_overlap(zlogi_new, lq)
+        # lost_qubit_logical_overlap(zlogi, lq)
