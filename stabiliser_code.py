@@ -339,6 +339,10 @@ def kick_out_qubits(T,qubits):
     return T_reduced
 
 
+def add_measurements_to_tableau(T,measurements):
+    T=to_gf2_tableau(T)
+    pass
+
 
 def find_logical_op_basis(tableau_matrix,n_qubits): #idk if this could be super slow
 
