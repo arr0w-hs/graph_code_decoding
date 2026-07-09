@@ -9,7 +9,7 @@ from gspf_ilp import create_graph_code
 from ortools.sat.python import cp_model
 
 
-def update_tableau(tableau : GF2, measurements : list):
+def update_tableau_after_measurements(tableau : GF2, measurements : list):
 
     n = len(measurements[0])//2
     # tableau = GF2(tableau)
@@ -109,6 +109,7 @@ def y_positions(v):
 
     return y_mask
 
+
 def rank_F2(M):
 
     if not isinstance(M, galois.GF2):
@@ -119,6 +120,7 @@ def rank_F2(M):
     row_space_rank = int(np.any(rref, axis=1).sum())
 
     return row_space_rank
+
 
 def find_ker_minus_rowspace(M,CSS:bool=False): #M must be GF2 matrix
 
@@ -146,6 +148,7 @@ def find_ker_minus_rowspace(M,CSS:bool=False): #M must be GF2 matrix
             ker_minus_rowspace.append(row)
 
     return ker_minus_rowspace
+
 
 def to_gf2_tableau(T):
 
@@ -274,6 +277,7 @@ def remove_lost_qubits_from_tableau(T,lost_qubits:list,row_in_T_where_logical_be
         
     return coeffs@T,destroyed_logicals
 
+
 def find_clean_logical(T, logi, lost_qubits):
 
     """Return logi multiplied by stabilizers so it has no support on lost_qubits.
@@ -300,6 +304,7 @@ def find_clean_logical(T, logi, lost_qubits):
 
     return logi_clean
 
+
 def solve_gf2(M, b):
     """returns x with M x = b over GF(2), or None if inconsistent."""
     M = GF2(M); b = GF2(b).reshape(-1, 1)
@@ -315,6 +320,7 @@ def solve_gf2(M, b):
         pivot = int(np.argmax(rowM.view(np.ndarray)))
         x[pivot] = rhs
     return x
+
 
 def kick_out_qubits(T,qubits):
 
@@ -386,9 +392,9 @@ def main():
     #X_logicals,Z_logicals,logicals=find_logical_op_basis(T,n_qubits)
     lost_qubits=[0,1]
 
-    T_new=remove_lost_qubits_from_tableau(T,lost_qubits)
+    T_new=remove_lost_qubits_from_tableau(T,lost_qubits) # good
     # print(T_new)
-    zlogi_new=find_clean_logical(T,xlogi,lost_qubits)
+    zlogi_new=find_clean_logical(T,xlogi,lost_qubits) # nice
     if zlogi_new is not None:
         print(ta.tableau2paulistring(zlogi_new))
 

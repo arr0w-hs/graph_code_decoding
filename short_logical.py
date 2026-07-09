@@ -10,6 +10,9 @@ from tableau import tableau2paulistring
 
 def pass_to_decoder(T,X_logicals,lost_qubits:list,CSS:bool,logical_qubits:list=[0],rounds:int=1,max_iter:int=100): 
     #assumes T is already in its reduced form! Full rank!
+    # works perfectly for CSS codes
+    # TODO: works for non-CSS, but does a different optimisation
+
 
     #finds a short X operator
     if sc.rank_F2(T)<T.shape[0]:
