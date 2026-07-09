@@ -8,7 +8,7 @@ from gspf_ilp import create_graph_code
 from tableau import tableau2paulistring
 
 
-def pass_to_decoder(T,X_logicals,lost_qubits:list,CSS:bool,logical_qubits:list=[0],rounds:int=1,max_iter:int=100):#T with logical X appended. So far only works for CSS codes
+def pass_to_decoder(T,X_logicals,lost_qubits:list,CSS:bool,logical_qubits:list=[0],rounds:int=1,max_iter:int=100): 
     #assumes T is already in its reduced form! Full rank!
 
     #finds a short X operator
@@ -39,6 +39,14 @@ def pass_to_decoder(T,X_logicals,lost_qubits:list,CSS:bool,logical_qubits:list=[
 
     H=sc.append_rows_to_tableau(T,X_logicals)
 
+    H,destroyed_logicals=sc.remove_lost_qubits_from_tableau(H,lost_qubits,row_in_T_where_logical_begins=num_gen,CSS=CSS)
+
+    if destroyed_logicals:
+        print('Logical information lost')
+        return None
+    
+    H=sc.kick_out_qubits(H,lost_qubits)
+    num_gen =H.shape[0]-(len(X_logicals)-len(destroyed_logicals)) #number of generators has reduced
     syndrome = np.zeros(H.shape[0], dtype=int)
     for k in logical_qubits:
         syndrome[num_gen + k] = 1  # 1 at the logical qubit's row, after the stabilizer rows
@@ -62,9 +70,6 @@ def pass_to_decoder(T,X_logicals,lost_qubits:list,CSS:bool,logical_qubits:list=[
         best = None
         best_weight = np.inf
 
-        lost = np.asarray(lost_qubits)
-        channel_probs[lost] = 0
-        channel_probs[lost + n_qubits] = 0
 
         for _ in range(rounds):
 

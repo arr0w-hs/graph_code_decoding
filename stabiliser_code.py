@@ -38,11 +38,12 @@ def update_tableau(tableau : GF2, measurements : list):
 
     return tableau
 
-def append_logical_to_tableau(tableau,logical,num_qubits):
-
+def append_logical_to_tableau(tableau,logical):
+    num_qubits=tableau.shape[1]//2 #note that this does not assume CSS form
     if type(logical)==str:
         logical=ta.paulistring2tableau(logical,num_qubits)
 
+    logical = np.asarray(logical).reshape(1, -1)   # force a single row (1, n)
     logical=GF2(np.array(logical, dtype=int))
     tableau=GF2(np.vstack([tableau,logical]))
 
@@ -120,6 +121,7 @@ def rank_F2(M):
     return row_space_rank
 
 def find_ker_minus_rowspace(M,CSS:bool=False): #M must be GF2 matrix
+
     M=to_gf2_tableau(M)
 
     if not isinstance(M, galois.GF2):
@@ -173,17 +175,104 @@ def overlap_with_lost_qubits(T,lost_qubits):
 
     return touches_lost,keep_rows
 
-
-def remove_lost_qubits_from_tableau(T,lost_qubits:list,CSS:bool=False):
-    #TODO: implement for CSS
+def reduced_row_echelon_form(T,column_from_where_to_start_RREF): # returns partial reduced echelon form, where the last rows 
+    #have only ones for the columns in list columns
+    #logicals are returned in the same order
     T=to_gf2_tableau(T)
+
+    logical_columns=np.arange(column_from_where_to_start_RREF,T.shape[1]) #to list when the logical columns start
+    
+    pivot_row = 0
+     
+    destroyed_logicals=[]
+    for c in logical_columns:
+
+        rows_with_1_in_c = [r for r in range(pivot_row, T.shape[0]) if T[r, c]] #rows with 1 on logical column
+
+        if not rows_with_1_in_c:
+            destroyed_logicals.append(c-column_from_where_to_start_RREF) #logical was destroyed by loss
+            continue #go to next logical
+        
+        r = rows_with_1_in_c[0]
+
+        T[[pivot_row, r]] = T[[r, pivot_row]]   
+
+        for rr in range(T.shape[0]):
+            if rr != pivot_row and T[rr, c]:
+                T[rr] = T[rr] + T[pivot_row]           # GF(2)
+
+        pivot_row += 1 
+
+    
+    s = pivot_row                       # number of survivors actually pivoted
+    num_rows = T.shape[0]
+    order = np.concatenate([np.arange(s, num_rows),   # non-logical rows first
+                        np.arange(s)])             # logical rows last
+    T = T[order]
+
+    return T, destroyed_logicals
+
+def make_T_solve_anti_commuting_logi_at_O(T,first_logi,o):
+
+    num_qubits=T.shape[1]//2
+    first_logi=GF2(np.asarray(first_logi).astype(int)).ravel()
+    if first_logi.shape[0]//2 != num_qubits:
+        raise ValueError("Logical does not contain as many qubits as tableau")
+    
+    anti_commute_qubits = np.asarray([o])
+    anti_commute_cols = np.concatenate([anti_commute_qubits, anti_commute_qubits + num_qubits])   # X and Z halves
+    
+    first_logi_anti_commute=np.zeros(T.shape[1],dtype=int)
+    first_logi_anti_commute=GF2(first_logi_anti_commute)
+    first_logi_anti_commute[anti_commute_cols] = first_logi[anti_commute_cols] 
+
+
+    first_logi_commute=first_logi.copy()
+    first_logi_commute[o]=0
+    first_logi_commute[o+num_qubits]=0
+
+    T=append_logical_to_tableau(T,first_logi_commute)
+    T=append_logical_to_tableau(T,first_logi_anti_commute)
+    
+
+    syndrome=GF2(np.zeros(T.shape[0], dtype=int))
+    syndrome[-1]=1
+
+    return T,syndrome
+
+def find_anti_commuting_logi_at_O(T,first_logi,o): #TODO: currently only works for one logical qubit
+
+    num_qubits=T.shape[1]//2
+    T_solve,syndrome=make_T_solve_anti_commuting_logi_at_O(T,first_logi,o)
+    T_solve = T_solve@GF2(construct_Omega_Matrix(num_qubits).astype(np.int64))
+    v = solve_gf2(T_solve, syndrome)
+    if v is None:
+        return None                          # no such logical exists
+    return v
+
+
+
+def remove_lost_qubits_from_tableau(T,lost_qubits:list,row_in_T_where_logical_begins:int=None,CSS:bool=False):
+    #TODO: implement for CSS
+    #can also remove lost qubits from tableau when the tableau includes the logical operators of the code
+    #they first rows up to row row_in_T_where_logical_begins must be stabilisers. Returns the same order
+
+    if not lost_qubits:
+        return T,[]
+    
+    T=to_gf2_tableau(T)
+        
     num_qubits=T.shape[1]//2
     lost = np.asarray(lost_qubits)
     lost_cols = np.concatenate([lost, lost + num_qubits])   # X and Z halves
     T_columns_lost_qubits=T[:,lost_cols]
     coeffs=T_columns_lost_qubits.left_null_space() #note the left null space!
+    destroyed_logicals=[]
 
-    return coeffs@T
+    if row_in_T_where_logical_begins is not None:
+        coeffs,destroyed_logicals=reduced_row_echelon_form(coeffs,row_in_T_where_logical_begins)  
+        
+    return coeffs@T,destroyed_logicals
 
 def find_clean_logical(T, logi, lost_qubits):
 
@@ -203,6 +292,7 @@ def find_clean_logical(T, logi, lost_qubits):
 
 
     c = solve_gf2(A.T, b)
+
     if c is None:
         return None            # not correctable: no clean representative exists
 
@@ -211,7 +301,7 @@ def find_clean_logical(T, logi, lost_qubits):
     return logi_clean
 
 def solve_gf2(M, b):
-    """Any x with M x = b over GF(2), or None if inconsistent."""
+    """returns x with M x = b over GF(2), or None if inconsistent."""
     M = GF2(M); b = GF2(b).reshape(-1, 1)
     R = GF2(np.hstack([M, b])).row_reduce()
     k = M.shape[1]
