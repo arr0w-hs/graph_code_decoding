@@ -109,12 +109,20 @@ if __name__ == "__main__":
     T=sc.tableau_list_to_matrix(stabi)
     # print(T.shape)
     #X_logicals,Z_logicals,logicals=find_logical_op_basis(T,n_qubits)
-    lq=[1]
+    lq=[2]
 
     T_new=sc.remove_lost_qubits_from_tableau(T,lq)
-    # print(T_new.shape)
-    xlogi_new=sc.find_clean_logical(T,xlogi,lq)
+    print(T_new.shape)
+    zlogi_new=sc.find_clean_logical(T,xlogi,lq)
 
-    if xlogi_new is not None:
+    if zlogi_new is not None:
+        # print(type(zlogi_new))
+        # print(ta.tableau2paulistring(zlogi_new))
 
-        test_gspf(T, xlogi_new, zlogi, [],lq, 3)
+        x_and_z_logical_anticommutation(xlogi, zlogi_new)
+        x_and_z_logical_anticommutation(xlogi, zlogi)
+
+        # stabiliser_logical_commutation_check(np.asarray(T_new), zlogi)
+
+        # lost_qubit_logical_overlap(zlogi_new, lq)
+        # lost_qubit_logical_overlap(zlogi, lq)
