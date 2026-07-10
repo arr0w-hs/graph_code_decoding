@@ -374,6 +374,29 @@ def find_logical_op_basis(tableau_matrix,n_qubits): #idk if this could be super 
         return None,None,logicals
 
 
+def turn_tableau_into_TXZY(T): #turns into (x|z|x+z) string
+    T=to_gf2_tableau(T)
+    num_qubits=T.shape[1]//2
+    Yblock=np.zeros((T.shape[0],num_qubits),dtype=np.int64)
+   
+    Yblock=T[:,:num_qubits]^T[:,num_qubits:]
+
+    Yblock=to_gf2_tableau(Yblock) 
+    T=np.hstack((T,Yblock))
+
+    return T
+
+def turn_TXZY_into_tableau(T):
+    
+    T=to_gf2_tableau(T)
+    num_qubits=T.shape[1]//2
+
+    Zblock=T[:,:num_qubits]
+    Xblock=T[:,num_qubits:2*num_qubits]
+
+    return np.hstack((Xblock,Zblock))
+
+
 
 
 
