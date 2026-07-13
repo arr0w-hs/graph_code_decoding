@@ -12,21 +12,22 @@ from ortools.sat.python import cp_model
 def update_tableau_after_measurements(tableau : GF2, measurements : list):
 
     n = len(measurements[0])//2
-    # tableau = GF2(tableau)
+    tableau = GF2(tableau)
 
+    tab_copy = tableau.copy()
     for meas in measurements:
-        location = [i for i in range(n) if meas[i]+meas[n+i] > 0][0]
-        meas = [meas[location], meas[n+location]]
+        # location = [i for i in range(n) if meas[i]+meas[n+i] > 0][0]
+        # meas = [meas[location], meas[n+location]]
 
         anticommuting_stab = []
         commuting_stab = []
 
-        for stab in tableau:
-            short_stab = [ele for i, ele in enumerate(stab) if i == location or i ==location+n]
+        for stab in tab_copy:
+            # short_stab = [ele for i, ele in enumerate(stab) if i == location or i ==location+n]
 
-            if not ta.commutation_check(short_stab, meas):
+            if not ta.commutation_check(stab, meas):
                 anticommuting_stab.append(stab)
-            elif ta.commutation_check(short_stab, meas):
+            elif ta.commutation_check(stab, meas):
                 commuting_stab.append(stab)
 
         if len(anticommuting_stab) > 0:
@@ -34,9 +35,9 @@ def update_tableau_after_measurements(tableau : GF2, measurements : list):
 
             anticommuting_stab = [ stab + pivot for stab in anticommuting_stab[1:]]
 
-        tableau = commuting_stab + anticommuting_stab
+        tab_copy = commuting_stab + anticommuting_stab + [meas.copy()]
 
-    return tableau
+    return tab_copy
 
 def append_logical_to_tableau(tableau,logical):
     num_qubits=tableau.shape[1]//2 #note that this does not assume CSS form
@@ -178,15 +179,15 @@ def overlap_with_lost_qubits(T,lost_qubits):
 
     return touches_lost,keep_rows
 
-def reduced_row_echelon_form(T,column_from_where_to_start_RREF): # returns partial reduced echelon form, where the last rows 
+def reduced_row_echelon_form(T,column_from_where_to_start_RREF): # returns partial reduced echelon form, where the last rows
     #have only ones for the columns in list columns
     #logicals are returned in the same order
     T=to_gf2_tableau(T)
 
     logical_columns=np.arange(column_from_where_to_start_RREF,T.shape[1]) #to list when the logical columns start
-    
+
     pivot_row = 0
-     
+
     destroyed_logicals=[]
     for c in logical_columns:
 
@@ -195,18 +196,18 @@ def reduced_row_echelon_form(T,column_from_where_to_start_RREF): # returns parti
         if not rows_with_1_in_c:
             destroyed_logicals.append(c-column_from_where_to_start_RREF) #logical was destroyed by loss
             continue #go to next logical
-        
+
         r = rows_with_1_in_c[0]
 
-        T[[pivot_row, r]] = T[[r, pivot_row]]   
+        T[[pivot_row, r]] = T[[r, pivot_row]]
 
         for rr in range(T.shape[0]):
             if rr != pivot_row and T[rr, c]:
                 T[rr] = T[rr] + T[pivot_row]           # GF(2)
 
-        pivot_row += 1 
+        pivot_row += 1
 
-    
+
     s = pivot_row                       # number of survivors actually pivoted
     num_rows = T.shape[0]
     order = np.concatenate([np.arange(s, num_rows),   # non-logical rows first
@@ -221,13 +222,13 @@ def make_T_solve_anti_commuting_logi_at_O(T,first_logi,o):
     first_logi=GF2(np.asarray(first_logi).astype(int)).ravel()
     if first_logi.shape[0]//2 != num_qubits:
         raise ValueError("Logical does not contain as many qubits as tableau")
-    
+
     anti_commute_qubits = np.asarray([o])
     anti_commute_cols = np.concatenate([anti_commute_qubits, anti_commute_qubits + num_qubits])   # X and Z halves
-    
+
     first_logi_anti_commute=np.zeros(T.shape[1],dtype=int)
     first_logi_anti_commute=GF2(first_logi_anti_commute)
-    first_logi_anti_commute[anti_commute_cols] = first_logi[anti_commute_cols] 
+    first_logi_anti_commute[anti_commute_cols] = first_logi[anti_commute_cols]
 
 
     first_logi_commute=first_logi.copy()
@@ -236,7 +237,7 @@ def make_T_solve_anti_commuting_logi_at_O(T,first_logi,o):
 
     T=append_logical_to_tableau(T,first_logi_commute)
     T=append_logical_to_tableau(T,first_logi_anti_commute)
-    
+
 
     syndrome=GF2(np.zeros(T.shape[0], dtype=int))
     syndrome[-1]=1
@@ -262,9 +263,9 @@ def remove_lost_qubits_from_tableau(T,lost_qubits:list,row_in_T_where_logical_be
 
     if not lost_qubits:
         return T,[]
-    
+
     T=to_gf2_tableau(T)
-        
+
     num_qubits=T.shape[1]//2
     lost = np.asarray(lost_qubits)
     lost_cols = np.concatenate([lost, lost + num_qubits])   # X and Z halves
@@ -273,8 +274,8 @@ def remove_lost_qubits_from_tableau(T,lost_qubits:list,row_in_T_where_logical_be
     destroyed_logicals=[]
 
     if row_in_T_where_logical_begins is not None:
-        coeffs,destroyed_logicals=reduced_row_echelon_form(coeffs,row_in_T_where_logical_begins)  
-        
+        coeffs,destroyed_logicals=reduced_row_echelon_form(coeffs,row_in_T_where_logical_begins)
+
     return coeffs@T,destroyed_logicals
 
 
@@ -378,10 +379,10 @@ def turn_tableau_into_TXZY(T): #turns into (x|z|x+z) string
     T=to_gf2_tableau(T)
     num_qubits=T.shape[1]//2
     Yblock=np.zeros((T.shape[0],num_qubits),dtype=np.int64)
-   
+
     Yblock=T[:,:num_qubits]^T[:,num_qubits:]
 
-    Yblock=to_gf2_tableau(Yblock) 
+    Yblock=to_gf2_tableau(Yblock)
     T=np.hstack((T,Yblock))
 
     return T

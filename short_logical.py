@@ -113,10 +113,10 @@ def main():
     T=sc.tableau_list_to_matrix(stabi)
     #X_logicals,Z_logicals,logicals=find_logical_op_basis(T,n_qubits)
     lost_qubits=[0,1]
-    short_z=pass_to_decoder(T,xlogi,lost_qubits,False,rounds=18,max_iter=100)
-    print('zlogical: ',tableau2paulistring(short_z))
-    print('xlogical: ',tableau2paulistring(xlogi))
-    return short_z
+    short_x=pass_to_decoder(T,xlogi,lost_qubits,False,rounds=18,max_iter=100)
+    print('xlogical: ',tableau2paulistring(short_x))
+    print('zlogical: ',tableau2paulistring(zlogi))
+    return short_x
 
 
 

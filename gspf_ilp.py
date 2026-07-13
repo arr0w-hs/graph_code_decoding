@@ -1,3 +1,4 @@
+import os
 import numpy as np
 from galois import GF2
 import tableau as ta
@@ -142,16 +143,18 @@ def find_gspf_one_logical(tableau : list[list], logical: list,
         return status
 
 
-def find_gspf_logical(tableau : list[list], xlogical: list,
+def generalised_spf_logical(tableau : np.ndarray, xlogical: list,
                     zlogical : list,
                     measurements : list[list], lost_qubits : list,
-                    g : int):
+                    g : int,
+                    target_qubit = None,
+                    max_time = 60_0):
     """
     Find a logical satisfying g-SPF algebra of GF2.
 
     Parameters
     ----------
-    tableau : list of list
+    tableau : numpy array
         Tableau of the stabiliser code with stabilisers.
         The representation is X part then Z part ( X | Z ).
 
@@ -176,6 +179,12 @@ def find_gspf_logical(tableau : list[list], xlogical: list,
     g : int
         The g in 'g-SPF'.
 
+    target_qubit : int
+        The required output qubit. Currently only of length 1, could be made a list.
+
+    max_time : int
+    The maximum amount of time in seconds the Solver runs for
+
     Returns
     -------
     A loss-tolerant representation of the 'logical' satisfying g-SPF.
@@ -186,7 +195,14 @@ def find_gspf_logical(tableau : list[list], xlogical: list,
 
     num_stab, m = T.shape
     num_qubits = m // 2
+    assert m % 2 == 0, "Tableau length must be even"
+    assert len(xlogical) == m, f"xlogical must have length {m}"
+    assert len(zlogical) == m, f"zlogical must have length {m}"
+    assert len(lost_qubits) == m, f"lost_qubits must have length {m}"
+    assert g >= 1, "g must be at least 1"
 
+    for meas in measurements:
+        assert len(meas) == m, f"measurement must have length {m}"
     # Model
     model = cp_model.CpModel()
 
@@ -194,8 +210,8 @@ def find_gspf_logical(tableau : list[list], xlogical: list,
     bx = [model.NewBoolVar(f"bx_{i}") for i in range(num_stab)]
     bz = [model.NewBoolVar(f"bz_{i}") for i in range(num_stab)]
 
-    bxt = [sum(bx[i] * T[i, j] for i in range(num_stab)) for j in range(m)]
-    bzt = [sum(bz[i] * T[i, j] for i in range(num_stab)) for j in range(m)]
+    bxt = [sum(bx[i] * int(T[i, j]) for i in range(num_stab)) for j in range(m)]
+    bzt = [sum(bz[i] * int(T[i, j]) for i in range(num_stab)) for j in range(m)]
 
     # minimise the x logical
     xmod2_terms = []
@@ -254,28 +270,29 @@ def find_gspf_logical(tableau : list[list], xlogical: list,
         meas_x = meas[:num_qubits]
         meas_z = meas[num_qubits:]
 
-        for q in range(num_qubits):
-            raw = int(meas_z[q]) * xlogical_x_part[q] + int(meas_x[q]) * xlogical_z_part[q]
+        raw = sum(
+            int(meas_z[q]) * xlogical_x_part[q] + int(meas_x[q]) * xlogical_z_part[q]
+            for q in range(num_qubits)
+        )
 
-            k_comm = model.NewIntVar(0, 1, f"commx_{q}")
-            model.Add(raw == 2 * k_comm)
-
+        k_comm = model.NewIntVar(0, num_qubits, f"commx_{i}")
+        model.Add(raw == 2 * k_comm)
 
     # measurement constraints Z
     for i, meas in enumerate(measurements):
         meas_x = meas[:num_qubits]
         meas_z = meas[num_qubits:]
 
-        for q in range(num_qubits):
-            raw = int(meas_z[q]) * zlogical_x_part[q] + int(meas_x[q]) * zlogical_z_part[q]
+        raw = sum(
+            int(meas_z[q]) * zlogical_x_part[q]
+            + int(meas_x[q]) * zlogical_z_part[q]
+            for q in range(num_qubits)
+        )
 
-            k_comm = model.NewIntVar(0, 1, f"commz_{q}")
-            model.Add(raw == 2 * k_comm)
-
+        k_comm = model.NewIntVar(0, num_qubits, f"commz_{i}")
+        model.Add(raw == 2 * k_comm)
 
     # constraint for g-SPF
-    ologi_x = zlogical[:num_qubits]
-    ologi_z = zlogical[num_qubits:]
     anti_terms = []
     for q in range(num_qubits):
         z = model.NewBoolVar(f"z_{q}")  # z = x AND y
@@ -293,48 +310,74 @@ def find_gspf_logical(tableau : list[list], xlogical: list,
         anti_comm = z + z2
 
 
-        anti_j = model.NewIntVar(0, 1, f"anti_{j}")
-        k_anti = model.NewIntVar(0, 1, f"k_anti_{j}")
+        anti_q = model.NewIntVar(0, 1, f"anti_{q}")
+        k_anti = model.NewIntVar(0, 1, f"k_anti_{q}")
 
+        if q == target_qubit:# and target_qubit is not None:
+            model.Add(anti_q == 1)
 
-        model.Add(anti_j == anti_comm - 2 * k_anti)
-        anti_terms.append(anti_j)
+        model.Add(anti_q == anti_comm - 2 * k_anti)
+        anti_terms.append(anti_q)
 
-    model.Add(sum(anti_terms) <= g)
+    # model.Add(sum(anti_terms) <= g)
+    anti_sum = sum(anti_terms)
+    model.Add(anti_sum <= g)
+
+    k_total = model.NewIntVar(0, num_qubits, "k_total_anti")
+    model.Add(anti_sum == 2 * k_total + 1)
 
     # objective function
     model.Minimize(sum(support))
 
 
     solver = cp_model.CpSolver()
-    solver.parameters.max_time_in_seconds = 60
-    solver.parameters.num_search_workers = 8
-
+    solver.parameters.max_time_in_seconds = max_time
+    solver.parameters.num_search_workers = min(8, os.cpu_count() or 1)
     status = solver.Solve(model)
 
-    print("Status:", solver.StatusName(status))
-
-    if status in [cp_model.OPTIMAL, cp_model.FEASIBLE]:
-        print("Minimum support:", solver.ObjectiveValue())
-        print("mod2 vector:", [solver.Value(v) for v in zmod2_terms])
-        print("support:", [solver.Value(v) for v in support])
-        z = [solver.Value(v) for v in zmod2_terms]
-        print(ta.tableau2paulistring(z))
+    # print("Status:", solver.StatusName(status))
+    status_name = solver.StatusName(status)
+    if status in (cp_model.OPTIMAL, cp_model.FEASIBLE):
         x = [solver.Value(v) for v in xmod2_terms]
-        print(ta.tableau2paulistring(x))
-        bx_sol = np.array([solver.Value(bx[i]) for i in range(num_stab)], dtype=int)
-        bz_sol = np.array([solver.Value(bz[i]) for i in range(num_stab)], dtype=int)
-        # print(bx_sol)
-        # print(bz_sol)
-        # print(ta.tableau2paulistring(zlogical))
+        z = [solver.Value(v) for v in zmod2_terms]
 
-        return x,z
+        result = {
+            "success": True,
+            "status": status,
+            "status_name": status_name,
+            "objective": solver.ObjectiveValue(),
+            "x": x,
+            "z": z,
+            "support_size": [solver.Value(v) for v in support],
+            "bx": np.array([solver.Value(bx[i]) for i in range(num_stab)], dtype=int),
+            "bz": np.array([solver.Value(bz[i]) for i in range(num_stab)], dtype=int),
+        }
+
+        # print("Minimum support:", result["objective"])
+        # print("mod2 vector:", z)
+        # print("support:", result["support_size"])
+        # print(ta.tableau2paulistring(z))
+        # print(ta.tableau2paulistring(x))
 
     else:
-        return status
+        result = {
+            "success": False,
+            "status": status,
+            "status_name": status_name,
+            "objective": None,
+            "x": xlogical,
+            "z": zlogical,
+            "support": None,
+            "bx": None,
+            "bz": None,
+        }
+
+    return result
 
 
 def create_graph_code(in_adj : np.array, code_node : int = 0):
+    """create a graph code from an input graph
+    using the 0th node as the input node"""
 
     num_nodes = in_adj.shape[0]
     identity = np.identity(num_nodes, dtype = np.uint16)
@@ -362,7 +405,7 @@ def create_graph_code(in_adj : np.array, code_node : int = 0):
 
 if __name__ == "__main__":
 
-    numq = 7
+    numq = 10
     g = nx.erdos_renyi_graph(numq, 0.7)
     # g = nx.cycle_graph(numq)
     g = nx.to_numpy_array(g, dtype = np.uint16)
@@ -373,11 +416,12 @@ if __name__ == "__main__":
     gg = 1
 
     previous_meas = ["Z1*Z2", "X1*X2"]
+    # previous_meas = ["Z1", "X2"]
     previous_meas = [ta.paulistring2tableau(ele, numq) for ele in previous_meas]
-    print(previous_meas)
+    # print(previous_meas)
 
     lost_qubits = np.unique(np.random.randint(0, numq, numq//4))
-    lost_qubits = []
+    # lost_qubits = []
     s = str()
     for ele in lost_qubits:
         s += "Y"+str(ele)+"*"
@@ -388,6 +432,6 @@ if __name__ == "__main__":
 
 
     T = GF2(stabi)
-    find_gspf_logical(stabi, xlogi, zlogi, previous_meas, lost_qubits, gg)
+    generalised_spf_logical(stabi, xlogi, zlogi, previous_meas, lost_qubits, gg, target_qubit=None)
 
     print()
