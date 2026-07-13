@@ -2,7 +2,9 @@ import os
 import numpy as np
 from galois import GF2
 import tableau as ta
+import stabiliser_code as sc
 import networkx as nx
+import decoder_methods as dc
 
 from ortools.sat.python import cp_model
 
@@ -80,10 +82,11 @@ def find_gspf_one_logical(tableau : list[list], logical: list,
 
 
     # lost qubits constraints
-    raw_L = sum(int(lost_qubits[j]) * mod2_terms[j] for j in range(m))
-    # max_raw_L = sum(int(lost_qubits[j]) for j in range(m))
-    # r = model.NewIntVar(0, max_raw_L // 2, "logical_constraint_k")
-    model.Add(raw_L == 0)
+    if lost_qubits: #making sure there is no error if lost_qubits is empty #jelena: this only works if lost_qubits is list
+        raw_L = sum(int(lost_qubits[j]) * mod2_terms[j] for j in range(m))
+        # max_raw_L = sum(int(lost_qubits[j]) for j in range(m))
+        # r = model.NewIntVar(0, max_raw_L // 2, "logical_constraint_k")
+        model.Add(raw_L == 0)
 
 
     # measurement constraints
@@ -374,6 +377,90 @@ def generalised_spf_logical(tableau : np.ndarray, xlogical: list,
 
     return result
 
+
+def generalised_spf_logical_heuristic(tableau, lost_qubits : list, 
+                    target_qubit:int= None):
+    """
+    Find a logical satisfying g-SPF algebra of GF2.
+
+    Parameters
+    ----------
+    tableau : 
+        Tableau of the stabiliser code with stabilisers.
+        The representation is X part then Z part ( X | Z ).
+
+
+    lost_qubits : list
+        A list of length all the known lost qubits. [0,1,2] means qubit 0,1 and 2 are lost
+
+    target_qubit : int
+        The required output qubit. Currently only of length 1, could be made a list.
+
+    max_time : int
+    The maximum amount of time in seconds the decoder runs for
+
+    Returns
+    -------
+    A loss-tolerant representation of the 'logical' minimising g heuristically
+
+    """
+
+    T = sc.to_gf2_tableau(tableau)
+
+    num_stab, m = T.shape
+    num_qubits = m // 2
+
+ 
+    #find logical op basis:
+
+    _,_,logical_ops=sc.find_logical_op_basis(T,num_qubits)
+    logical_repr=logical_ops[0]
+
+    #remove lost qubits
+
+    T_clean,indices=sc.remove_lost_qubits_from_tableau(T,lost_qubits)
+    logi_clean,indices=sc.find_clean_logical(T,logical_repr,lost_qubits)
+
+    result = {
+            "success": False,
+            "x":None,
+            "z":None
+        }
+
+    if logi_clean is None:
+        print("logical information destroyed")
+        return result
+
+    
+    # find short first logical
+
+    short_first=dc.find_short_first_logical(T_clean,logi_clean)
+
+    if short_first is None: #BP decoder failed
+        return result
+    
+    #find second logical
+    if target_qubit is not None:
+        short_second=sc.find_anti_commuting_logi_at_O(T_clean,short_first,target_qubit) #note that this does
+        #not need to be short
+    
+
+    short_second=dc.find_short_second_logical(T_clean,short_first)
+
+    if short_second is None:
+        return result
+
+ 
+    result = {
+            "success": True,
+             
+            "x": ta.tableau2paulistring(short_first,indices=indices),
+            "z": ta.tableau2paulistring(short_second,indices=indices)
+        }
+ 
+    #TODO: output overlap
+
+    return result
 
 def create_graph_code(in_adj : np.array, code_node : int = 0):
     """create a graph code from an input graph

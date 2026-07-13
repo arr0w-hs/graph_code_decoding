@@ -1,6 +1,6 @@
 import numpy as np
 import stabiliser_code as sc
-from ldpc import BpDecoder, BpOsdDecoder
+from ldpc import BpOsdDecoder
 from galois import GF2
 import networkx as nx
 import galois
@@ -19,8 +19,13 @@ def create_error_probs_from_logical(num_qubits,logical,p_base:float=0.1,p_punish
     
     channel_probs = np.full(3 * num_qubits, p_base) #note that this is in (x|z|y) notation
     logical=logical.ravel()
-    lx = logical[:num_qubits].astype(bool)
-    lz = logical[num_qubits:].astype(bool)
+
+    try:
+        lx = logical[:num_qubits].astype(bool)
+        lz = logical[num_qubits:].astype(bool)
+    except(TypeError):
+        lx=np.array(logical[:num_qubits]).astype(bool)
+        lz=np.array(logical[num_qubits:]).astype(bool)
 
     channel_probs[:num_qubits][lx]=p_punish #z error unlikely when logical has x entry, note swap of x and z for channel_probs
     channel_probs[num_qubits:2*num_qubits][lz]=p_punish
@@ -30,7 +35,7 @@ def create_error_probs_from_logical(num_qubits,logical,p_base:float=0.1,p_punish
 
 
 
-def find_short_first_logical(T,other_logical_repr,CSS:bool,max_iter:int=100): 
+def find_short_first_logical(T,other_logical_repr,CSS:bool=False,max_iter:int=100): #TODO: what happens if result is None? This may happen?
 
 
     #decoder problem now takes on representation (x|z|x plus z)
@@ -50,10 +55,11 @@ def find_short_first_logical(T,other_logical_repr,CSS:bool,max_iter:int=100):
         other_logical_repr=sc.tableau_list_to_matrix(other_logical_repr)
 
     if CSS:
+        print("css")
         pass
 
     T=sc.append_logical_to_tableau(T,other_logical_repr)
-    T=sc.turn_tableau_into_TXYZ(T)
+    T=sc.turn_tableau_into_TXZY(T)
 
     syndrome = np.zeros(T.shape[0], dtype=int)
     syndrome[-1]=1 #assumes logical qubit is last row
@@ -66,24 +72,24 @@ def find_short_first_logical(T,other_logical_repr,CSS:bool,max_iter:int=100):
         pass
 
     else:
-        channel_probs = np.full(2 * n_qubits, 0.1)
-
-        best = None
-        best_weight = np.inf
+        channel_probs = np.full(3 * n_qubits, 0.1)
 
         decoder = BpOsdDecoder(T, channel_probs=channel_probs,
                                 max_iter=max_iter, bp_method="ms",
                                 osd_method="osd_cs", osd_order=6)
         result = decoder.decode(syndrome_1d)
 
-        assert np.array_equal((T @ GF2(result)), syndrome_1d), "decoded result does not reproduce the syndrome"
-        assert result.any(), "decoder returned all-zero (no operator found)"
+        if result is None or not np.asarray(result).any():
+            return None  
+        else:
+            assert np.array_equal((T @ GF2(result)), syndrome_1d), "decoded result does not reproduce the syndrome"
+            assert result.any(), "decoder returned all-zero (no operator found)"
 
     result=result.reshape(1, -1)
     
-    return sc.turn_TXZY_into_tableau(result)
+    return sc.turn_TXZYerror_into_tableau(result)
 
-def find_short_second_logical(T,first_logical,CSS:bool,max_iter:int=100,p_base:float=0.1,p_punish:float=0.01): 
+def find_short_second_logical(T,first_logical,CSS:bool=False,max_iter:int=100,p_base:float=0.1,p_punish:float=0.01): 
 
     #finds second logical with hopefully small overlap
 
@@ -102,7 +108,7 @@ def find_short_second_logical(T,first_logical,CSS:bool,max_iter:int=100,p_base:f
         pass
 
     T=sc.append_logical_to_tableau(T,first_logical)
-    T=sc.turn_tableau_into_TXYZ(T)
+    T=sc.turn_tableau_into_TXZY(T)
 
     syndrome = np.zeros(T.shape[0], dtype=int)
     syndrome[-1]=1 #assumes logical qubit is last row
@@ -123,117 +129,44 @@ def find_short_second_logical(T,first_logical,CSS:bool,max_iter:int=100,p_base:f
         
         result = decoder.decode(syndrome_1d)
 
-        assert np.array_equal((T @ GF2(result)), syndrome_1d), "decoded result does not reproduce the syndrome"
-        assert result.any(), "decoder returned all-zero (no operator found)"
+        if result is None or not np.asarray(result).any():
+            return None   
+        
+        else:
+
+            assert np.array_equal((T @ GF2(result)), syndrome_1d), "decoded result does not reproduce the syndrome"
+            assert result.any(), "decoder returned all-zero (no operator found)"
     
     result=result.reshape(1, -1)
-    
-    return sc.turn_TXZY_into_tableau(result)
  
-
-def pass_to_decoder(T,X_logicals,lost_qubits:list,CSS:bool,logical_qubits:list=[0],rounds:int=1,max_iter:int=100): 
-    #assumes T is already in its reduced form! Full rank!
-    # works perfectly for CSS codes
-    # TODO: works for non-CSS, but does a different optimisation
-
-
-    #finds a short X operator
-    if sc.rank_F2(T)<T.shape[0]:
-
-        raise ValueError('T not full rank')
-
-    n_qubits=T.shape[1]//2 #integer division
-
-    num_gen=T.shape[0]
-
-    num_gen_x=num_gen//2
-
-    T=sc.to_gf2_tableau(T)
-
-    if isinstance(X_logicals,list):
-        X_logicals=sc.tableau_list_to_matrix(X_logicals)
-
-    if CSS:
-        T=T[:num_gen_x,:n_qubits]
-        num_gen=num_gen_x
-
-
-    H=sc.append_rows_to_tableau(T,X_logicals)
-
-    H,destroyed_logicals=sc.remove_lost_qubits_from_tableau(H,lost_qubits,row_in_T_where_logical_begins=num_gen,CSS=CSS)
-
-    if destroyed_logicals:
-        print('Logical information lost')
-        return None
-    
-    H=sc.kick_out_qubits(H,lost_qubits)
-    num_gen =H.shape[0]-(len(X_logicals)-len(destroyed_logicals)) #number of generators has reduced
-    syndrome = np.zeros(H.shape[0], dtype=int)
-    for k in logical_qubits:
-        syndrome[num_gen + k] = 1  # 1 at the logical qubit's row, after the stabilizer rows
-
-    syndrome_1d = syndrome.flatten()
-
-    syndrome_1d = syndrome_1d.astype(np.uint8)
-
-
-    if CSS:
-        decoder = BpDecoder(H, max_iter=max_iter)
-        result = decoder.decode(syndrome_1d)
-
-    else:
-        Omega=sc.construct_Omega_Matrix(n_qubits)
-        Omega = GF2(Omega.astype(np.int64))
-        H_eff= H @ Omega
-
-        channel_probs = np.full(2 * n_qubits, 0.1)
-
-        best = None
-        best_weight = np.inf
-
-
-        for _ in range(rounds):
-
-            decoder = BpOsdDecoder(H_eff, channel_probs=channel_probs,
-                                max_iter=max_iter, bp_method="ms",
-                                osd_method="osd_cs", osd_order=6)
-            result = decoder.decode(syndrome_1d)
-
-            assert np.array_equal((H_eff @ GF2(result)), syndrome_1d), "decoded result does not reproduce the syndrome"
-            assert result.any(), "decoder returned all-zero (no operator found)"
-
-            pauli_weight=sc.compute_Pauli_weight(result)
-
-            if pauli_weight < best_weight:
-                best_weight = pauli_weight
-                best = result.copy()
-
-            y_mask = sc.y_positions(result)
-            channel_probs[:n_qubits][y_mask] = np.minimum(channel_probs[:n_qubits][y_mask] * 2, 0.49) #doubling the old probability
-            channel_probs[n_qubits:][y_mask] = np.minimum(channel_probs[n_qubits:][y_mask] * 2, 0.49)
-
-        result=best
-
-    return result
+    return sc.turn_TXZYerror_into_tableau(result)
+ 
 
 
 def main():
 
-    numq = 16
+    numq = 400
     g = nx.erdos_renyi_graph(numq, 0.7)
     #g = nx.cycle_graph(numq)
     g = nx.to_numpy_array(g, dtype = np.uint16)
 
     xlogi, zlogi, stabi = create_graph_code(g)
+    print('xlogical input: ',tableau2paulistring(xlogi))
     #for i in range(stabi.shape[0]):
         #print(tableau2paulistring(stabi[i,:]))
 
     T=sc.tableau_list_to_matrix(stabi)
     #X_logicals,Z_logicals,logicals=find_logical_op_basis(T,n_qubits)
     lost_qubits=[0,1]
-    short_z=pass_to_decoder(T,xlogi,lost_qubits,False,rounds=18,max_iter=100)
-    print('zlogical: ',tableau2paulistring(short_z))
-    print('xlogical: ',tableau2paulistring(xlogi))
+    short_z=find_short_first_logical(T,xlogi)
+    #x=find_short_second_logical(T,short_z)
+    nonzero=np.flatnonzero(short_z.ravel())
+    #print('nonzero indices', nonzero)
+    print('short zlogical from decoder: ',tableau2paulistring(short_z))
+    #print('xlogical decoder',tableau2paulistring(x))
+    short_x=sc.find_anti_commuting_logi_at_O(T,short_z,nonzero[0])
+    print('xlogical anticommuting at {}, linear algebra method: '.format(nonzero[0]),(tableau2paulistring(short_x)))
+     
     return short_z
 
 

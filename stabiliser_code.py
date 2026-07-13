@@ -8,6 +8,24 @@ from gspf_ilp import create_graph_code
 
 from ortools.sat.python import cp_model
 
+def lost_indices_to_mask(lost, n_qubits):
+    """
+    Convert a list of lost qubit indices into a (L|L).
+
+    lost     : iterable of qubit indices that are lost
+    n_qubits : total number of qubits, n
+ 
+    """
+    lost = np.atleast_1d(np.asarray(lost, dtype=int))
+
+    if lost.size and (lost.min() < 0 or lost.max() >= n_qubits):
+        raise ValueError(f"lost qubit indices must lie in 0..{n_qubits - 1}")
+
+    L = np.zeros(n_qubits, dtype=int)
+    L[lost] = 1
+
+    return np.concatenate([L, L])
+
 
 def update_tableau_after_measurements(tableau : GF2, measurements : list):
 
@@ -216,7 +234,38 @@ def reduced_row_echelon_form(T,column_from_where_to_start_RREF): # returns parti
 
     return T, destroyed_logicals
 
-def make_T_solve_anti_commuting_logi_at_O(T,first_logi,o):
+
+def split_stabilizer_except(stab, o):
+    """
+    Decompose a stabilizer into its single-qubit Pauli factors, omitting qubit o.
+
+    stab : (2n,) array in [x_0..x_{n-1} | z_0..z_{n-1}] form
+    o    : qubit index to exclude
+
+    Returns a list of (2n,) GF2 rows, one per qubit i != o on which stab acts
+    non-trivially. Each row is zero everywhere except at columns i and i+n,
+    where it copies stab's entries. Identity qubits produce no entry.
+    """
+    v = GF2(np.asarray(stab).astype(np.int64)).ravel()
+    n = v.shape[0] // 2
+
+    if not 0 <= o < n:
+        raise ValueError(f"o={o} outside qubit range 0..{n-1}")
+
+    factors = []
+    for i in range(n):
+        if i == o:
+            continue
+        if not (v[i] or v[i + n]):
+            continue
+        row = GF2(np.zeros(2 * n, dtype=int))
+        row[i] = v[i]
+        row[i + n] = v[i + n]
+        factors.append(row)
+
+    return factors
+
+def make_T_solve_anti_commuting_logi_at_O(T,first_logi,o:int):
 
     num_qubits=T.shape[1]//2
     first_logi=GF2(np.asarray(first_logi).astype(int)).ravel()
@@ -231,11 +280,15 @@ def make_T_solve_anti_commuting_logi_at_O(T,first_logi,o):
     first_logi_anti_commute[anti_commute_cols] = first_logi[anti_commute_cols]
 
 
-    first_logi_commute=first_logi.copy()
-    first_logi_commute[o]=0
-    first_logi_commute[o+num_qubits]=0
 
-    T=append_logical_to_tableau(T,first_logi_commute)
+    first_logi_commute=first_logi.copy()
+    first_logi_commute_list=split_stabilizer_except(first_logi_commute,o)
+     
+
+
+    for l in first_logi_commute_list:
+        T=append_logical_to_tableau(T,l)
+        
     T=append_logical_to_tableau(T,first_logi_anti_commute)
 
 
@@ -254,32 +307,54 @@ def find_anti_commuting_logi_at_O(T,first_logi,o): #TODO: currently only works f
         return None                          # no such logical exists
     return v
 
+def index_array(n:int, lost:list):
+    """
+    Build np.concatenate([arange(n), arange(n)]) with every entry whose
+    value appears in `lost` removed from both copies.
 
+    """
+    base = np.arange(n)
+    keep = base[~np.isin(base, np.asarray(lost, dtype=int))]
 
-def remove_lost_qubits_from_tableau(T,lost_qubits:list,row_in_T_where_logical_begins:int=None,CSS:bool=False):
+    return keep
+
+def remove_lost_qubits_from_tableau(T,lost_qubits:list,row_in_T_where_logical_begins:int=None,CSS:bool=False,\
+                                    collapse:bool=True):
     #TODO: implement for CSS
     #can also remove lost qubits from tableau when the tableau includes the logical operators of the code
     #they first rows up to row row_in_T_where_logical_begins must be stabilisers. Returns the same order
 
-    if not lost_qubits:
-        return T,[]
+
 
     T=to_gf2_tableau(T)
 
     num_qubits=T.shape[1]//2
+
+    if not lost_qubits:
+        return T,[],index_array(num_qubits,lost_qubits)
+    
     lost = np.asarray(lost_qubits)
     lost_cols = np.concatenate([lost, lost + num_qubits])   # X and Z halves
     T_columns_lost_qubits=T[:,lost_cols]
     coeffs=T_columns_lost_qubits.left_null_space() #note the left null space!
+    coeffs=coeffs.row_reduce()
     destroyed_logicals=[]
 
     if row_in_T_where_logical_begins is not None:
         coeffs,destroyed_logicals=reduced_row_echelon_form(coeffs,row_in_T_where_logical_begins)
 
-    return coeffs@T,destroyed_logicals
+    T_update=coeffs@T
+    
+    if collapse:
+        indices=index_array(num_qubits,lost_qubits)
+        T_update=kick_out_qubits(T_update,lost_qubits)
+    else:
+        indices=index_array(num_qubits,[])
+
+    return T_update,destroyed_logicals,indices
 
 
-def find_clean_logical(T, logi, lost_qubits):
+def find_clean_logical(T, logi, lost_qubits,collapse:bool=True):
 
     """Return logi multiplied by stabilizers so it has no support on lost_qubits.
     T:    (num_gen, 2n) GF2 stabilizer generators
@@ -299,11 +374,20 @@ def find_clean_logical(T, logi, lost_qubits):
     c = solve_gf2(A.T, b)
 
     if c is None:
-        return None            # not correctable: no clean representative exists
+        print('oh no')
+        indices=index_array(n_qubits,[])
+        return None,indices          # not correctable: no clean representative exists
 
     logi_clean = logi + c @ T
 
-    return logi_clean
+    if collapse:
+        indices=index_array(n_qubits,lost_qubits)
+        print('indices in find_clean_logica',indices)
+        logi_clean=kick_out_qubits(logi_clean,lost_qubits)
+    else:
+        indices=index_array(n_qubits,[])
+
+    return logi_clean, indices
 
 
 def solve_gf2(M, b):
@@ -323,22 +407,65 @@ def solve_gf2(M, b):
     return x
 
 
-def kick_out_qubits(T,qubits):
+def kick_out_qubits(T, qubits):
+    """
+    Remove the X and Z columns of the given qubits from a tableau.
 
-    T=to_gf2_tableau(T)
+    T      : (2n,) single stabilizer, or (k, 2n) tableau
+    qubits : iterable of qubit indices to drop
 
-    n_qubits = T.shape[1] // 2
+    Returns the same dimensionality as the input.
+    """
+    T = to_gf2_tableau(T)
 
-    lost = np.asarray(qubits)
+    if T.ndim not in (1, 2):
+        raise ValueError(f"expected 1D or 2D tableau, got ndim={T.ndim}")
 
-    lost_cols = np.concatenate([lost, lost + n_qubits])   # X and Z halves
+    n_cols = T.shape[-1]
+    n_qubits = n_cols // 2
 
-    keep_cols = np.setdiff1d(np.arange(T.shape[1]), lost_cols)
+    lost = np.atleast_1d(np.asarray(qubits, dtype=int))
+    lost_cols = np.concatenate([lost, lost + n_qubits])
 
-    T_reduced = T[:, keep_cols]
+    keep_cols = np.setdiff1d(np.arange(n_cols), lost_cols)
 
-    return T_reduced
+    return T[..., keep_cols] #... is short for take the whole array if 1d array, take all rows if 2d array
 
+def restore_lost_qubits(T_reduced, indices, n_qubits):
+    """
+    Inverse of kick_out_qubits: re-embed a reduced tableau into the full
+    2*n_qubits column layout, writing 0 into the X and Z columns of every
+    qubit that is not in `indices`.
+
+    T_reduced : (2m,) or (k, 2m) array, m = len(indices)
+    indices   : surviving qubit labels, as returned by index_array
+    n_qubits  : number of qubits in the original (pre-loss) tableau
+
+    Returns the same dimensionality as the input, with 2*n_qubits columns.
+    """
+    T_reduced = to_gf2_tableau(T_reduced)
+
+    if T_reduced.ndim not in (1, 2):
+        raise ValueError(f"expected 1D or 2D tableau, got ndim={T_reduced.ndim}")
+
+    indices = np.atleast_1d(np.asarray(indices, dtype=int))
+    m = indices.size
+
+    if T_reduced.shape[-1] != 2 * m:
+        raise ValueError(
+            f"reduced tableau has {T_reduced.shape[-1]} columns but "
+            f"{m} surviving qubits implies {2 * m}"
+        )
+    if m and (indices.min() < 0 or indices.max() >= n_qubits):
+        raise ValueError(f"indices must lie in 0..{n_qubits - 1}")
+
+    full_shape = T_reduced.shape[:-1] + (2 * n_qubits,)
+    T_full = GF2(np.zeros(full_shape, dtype=int))
+
+    keep_cols = np.concatenate([indices, indices + n_qubits])
+    T_full[..., keep_cols] = T_reduced
+
+    return T_full
 
 def add_measurements_to_tableau(T,measurements):
     T=to_gf2_tableau(T)
@@ -349,7 +476,8 @@ def find_logical_op_basis(tableau_matrix,n_qubits): #idk if this could be super 
 
     T = GF2(tableau_matrix)      # numpy array of 0/1
 
-    is_CSS = np.all(tableau_matrix[:n_qubits, n_qubits:] == 0) and np.all(tableau_matrix[n_qubits:, :n_qubits] == 0)
+    is_CSS = np.all(T[:n_qubits, n_qubits:] == 0) and np.all(T[n_qubits:, :n_qubits] == 0)
+    #TODO: put this in other places?
 
     if is_CSS: #convention: T=((H_x,0),(0,H_z))
         T_x=T[:n_qubits,:n_qubits]
@@ -390,38 +518,61 @@ def turn_tableau_into_TXZY(T): #turns into (x|z|x+z) string
 def turn_TXZY_into_tableau(T):
 
     T=to_gf2_tableau(T)
-    num_qubits=T.shape[1]//2
+
+     
+    num_qubits=T.shape[1]//3
 
     Zblock=T[:,:num_qubits]
     Xblock=T[:,num_qubits:2*num_qubits]
 
-    return np.hstack((Xblock,Zblock))
+    T_new=np.hstack((Xblock,Zblock))
+     
+
+    return T_new
+
+def turn_TXZYerror_into_tableau(T):
+    T = to_gf2_tableau(T)
+    num_qubits = T.shape[1] // 3
+
+    a = T[:, :num_qubits]                 # pairs with the sx columns -> Z errors
+    b = T[:, num_qubits:2*num_qubits]     # pairs with the sz columns -> X errors
+    c = T[:, 2*num_qubits:]               # Y errors
+
+    Xblock = b + c    #x+x+z, check 3n notation
+    Zblock = a + c
+
+    return np.hstack((Xblock, Zblock))
 
 
 def main():
 
 
-    nodes=7
+    nodes=15
     numq=nodes-1
     g = nx.erdos_renyi_graph(numq, 0.7)
     #g = nx.cycle_graph(numq)
     g = nx.to_numpy_array(g, dtype = np.uint16)
 
     xlogi, zlogi, stabi = create_graph_code(g)
+    
     print(ta.tableau2paulistring(xlogi))
     # print(len(zlogi))
     #for i in range(stabi.shape[0]):
         #print(tableau2paulistring(stabi[i,:]))
 
     T=tableau_list_to_matrix(stabi)
+    numq=T.shape[1]//2
+    print('number of qubits: ',numq)
     #X_logicals,Z_logicals,logicals=find_logical_op_basis(T,n_qubits)
     lost_qubits=[0,1]
 
-    T_new=remove_lost_qubits_from_tableau(T,lost_qubits) # good
-    # print(T_new)
-    zlogi_new=find_clean_logical(T,xlogi,lost_qubits) # nice
+    T_new,destroyed_logicals,indices=remove_lost_qubits_from_tableau(T,lost_qubits) # good
+    print("new T: {}".format(ta.tableau2paulistring(restore_lost_qubits(T_new,n_qubits=numq,indices=indices))))
+    print('new indices', indices)
+    zlogi_new,z_indices=find_clean_logical(T,xlogi,lost_qubits) # nice
     if zlogi_new is not None:
-        print(ta.tableau2paulistring(zlogi_new))
+        print('zlogi_new ',ta.tableau2paulistring(restore_lost_qubits(zlogi_new,n_qubits=numq,indices=indices)))
+    print('z indices',z_indices)
 
 if __name__ == "__main__":
 

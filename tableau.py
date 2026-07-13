@@ -5,35 +5,44 @@ import numpy as np
 
 
 
-def tableau2paulistring(in_stab):
+def _row2paulistring(row,indices:None):
+    n = len(row) // 2
+
+    x, z = row[:n], row[n:]
+
+    if indices is None:
+        indices=np.arange(n)
+
+    terms = []
+    for i in range(n):
+        if x[i] and z[i]:
+            terms.append(f"Y{indices[i]}")
+        elif x[i]:
+            terms.append(f"X{indices[i]}")
+        elif z[i]:
+            terms.append(f"Z{indices[i]}")
+
+    return "*".join(terms) if terms else "I"
+
+
+def tableau2paulistring(in_stab,indices:list=None):
     """
-    converts a stabilizer in tableau form
-    into a pauli string in stim form
+    Convert an X|Z stabilizer tableau to Stim-style Pauli strings.
+
+    in_stab : (2n,) array   -> returns a single string
+              (k, 2n) array -> returns a list of k strings
+    Column layout assumed: [x_0 ... x_{n-1} | z_0 ... z_{n-1}].
     """
+    
+    arr = np.asarray(in_stab, dtype=bool)
 
-    ps = str()
-    n = len(in_stab)//2
+    if arr.ndim == 1:
+        return _row2paulistring(arr,indices=indices)
 
-    x1 = [ele for i, ele in enumerate(in_stab) if i<n]
-    z1 = [ele for i, ele in enumerate(in_stab) if i>=n]
+    if arr.ndim == 2:
+        return [_row2paulistring(row,indices=indices) for row in arr]
 
-    for i, ele in enumerate(x1):
-        if ele and not z1[i]:
-            ps += "X"+str(i)+"*"
-        elif ele and z1[i]:
-            ps += "Y"+str(i)+"*"
-        elif not ele and z1[i]:
-            ps += "Z"+str(i)+"*"
-        else:
-            continue
-
-    out_ps = str()
-    ps.replace("*", "", 2)
-    for i, ele in enumerate(ps):
-        if i != len(ps)-1:
-            out_ps += ele
-
-    return out_ps
+    raise ValueError(f"expected 1D or 2D array, got ndim={arr.ndim}")
 
 
 def qubit_wise_commutation(a1, a2):
