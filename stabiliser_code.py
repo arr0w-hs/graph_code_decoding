@@ -387,7 +387,7 @@ def turn_tableau_into_TXZY(T): #turns into (x|z|x+z) string
     return T
 
 def turn_TXZY_into_tableau(T):
-    
+
     T=to_gf2_tableau(T)
     num_qubits=T.shape[1]//2
 
@@ -395,9 +395,6 @@ def turn_TXZY_into_tableau(T):
     Xblock=T[:,num_qubits:2*num_qubits]
 
     return np.hstack((Xblock,Zblock))
-
-
-
 
 
 def main():
