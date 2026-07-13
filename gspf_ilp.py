@@ -381,7 +381,7 @@ def create_graph_code(in_adj : np.array, code_node : int = 0):
 
 if __name__ == "__main__":
 
-    numq = 30
+    numq = 10
     g = nx.erdos_renyi_graph(numq, 0.7)
     # g = nx.cycle_graph(numq)
     g = nx.to_numpy_array(g, dtype = np.uint16)
@@ -392,7 +392,7 @@ if __name__ == "__main__":
     gg = 1
 
     previous_meas = ["Z1*Z2", "X1*X2"]
-    previous_meas = ["Z1", "X2"]
+    # previous_meas = ["Z1", "X2"]
     previous_meas = [ta.paulistring2tableau(ele, numq) for ele in previous_meas]
     # print(previous_meas)
 
@@ -408,6 +408,6 @@ if __name__ == "__main__":
 
 
     T = GF2(stabi)
-    generalised_spf_logical(stabi, xlogi, zlogi, previous_meas, lost_qubits, gg, target_qubit=3)
+    generalised_spf_logical(stabi, xlogi, zlogi, previous_meas, lost_qubits, gg, target_qubit=None)
 
     print()
