@@ -1,3 +1,4 @@
+import os
 import numpy as np
 from galois import GF2
 import tableau as ta
@@ -146,7 +147,8 @@ def generalised_spf_logical(tableau : np.ndarray, xlogical: list,
                     zlogical : list,
                     measurements : list[list], lost_qubits : list,
                     g : int,
-                    target_qubit = None):
+                    target_qubit = None,
+                    max_time = 60_0):
     """
     Find a logical satisfying g-SPF algebra of GF2.
 
@@ -179,6 +181,9 @@ def generalised_spf_logical(tableau : np.ndarray, xlogical: list,
 
     target_qubit : int
         The required output qubit. Currently only of length 1, could be made a list.
+
+    max_time : int
+    The maximum amount of time in seconds the Solver runs for
 
     Returns
     -------
@@ -326,34 +331,53 @@ def generalised_spf_logical(tableau : np.ndarray, xlogical: list,
 
 
     solver = cp_model.CpSolver()
-    solver.parameters.max_time_in_seconds = 60
-    solver.parameters.num_search_workers = 8
-
+    solver.parameters.max_time_in_seconds = max_time
+    solver.parameters.num_search_workers = min(8, os.cpu_count() or 1)
     status = solver.Solve(model)
 
-    print("Status:", solver.StatusName(status))
-
-    if status in [cp_model.OPTIMAL, cp_model.FEASIBLE]:
-        print("Minimum support:", solver.ObjectiveValue())
-        print("mod2 vector:", [solver.Value(v) for v in zmod2_terms])
-        print("support:", [solver.Value(v) for v in support])
-        z = [solver.Value(v) for v in zmod2_terms]
-        print(ta.tableau2paulistring(z))
+    # print("Status:", solver.StatusName(status))
+    status_name = solver.StatusName(status)
+    if status in (cp_model.OPTIMAL, cp_model.FEASIBLE):
         x = [solver.Value(v) for v in xmod2_terms]
-        print(ta.tableau2paulistring(x))
-        bx_sol = np.array([solver.Value(bx[i]) for i in range(num_stab)], dtype=int)
-        bz_sol = np.array([solver.Value(bz[i]) for i in range(num_stab)], dtype=int)
-        # print(bx_sol)
-        # print(bz_sol)
-        # print(ta.tableau2paulistring(zlogical))
+        z = [solver.Value(v) for v in zmod2_terms]
 
-        return x,z
+        result = {
+            "success": True,
+            "status": status,
+            "status_name": status_name,
+            "objective": solver.ObjectiveValue(),
+            "x": x,
+            "z": z,
+            "support_size": [solver.Value(v) for v in support],
+            "bx": np.array([solver.Value(bx[i]) for i in range(num_stab)], dtype=int),
+            "bz": np.array([solver.Value(bz[i]) for i in range(num_stab)], dtype=int),
+        }
+
+        # print("Minimum support:", result["objective"])
+        # print("mod2 vector:", z)
+        # print("support:", result["support_size"])
+        # print(ta.tableau2paulistring(z))
+        # print(ta.tableau2paulistring(x))
 
     else:
-        return status
+        result = {
+            "success": False,
+            "status": status,
+            "status_name": status_name,
+            "objective": None,
+            "x": xlogical,
+            "z": zlogical,
+            "support": None,
+            "bx": None,
+            "bz": None,
+        }
+
+    return result
 
 
 def create_graph_code(in_adj : np.array, code_node : int = 0):
+    """create a graph code from an input graph
+    using the 0th node as the input node"""
 
     num_nodes = in_adj.shape[0]
     identity = np.identity(num_nodes, dtype = np.uint16)

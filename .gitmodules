@@ -1,3 +1,0 @@
-[submodule "external/spf"]
-	path = external/spf
-	url = https://github.com/arr0w-hs/spf.git
