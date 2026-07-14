@@ -379,7 +379,7 @@ def generalised_spf_logical(tableau : np.ndarray, xlogical: list,
 
 
 def generalised_spf_logical_heuristic(tableau, lost_qubits : list, 
-                    target_qubit:int= None):
+                    target_qubit:int= None,max_iter:int=100):
     """
     Find a logical satisfying g-SPF algebra of GF2.
 
@@ -396,8 +396,8 @@ def generalised_spf_logical_heuristic(tableau, lost_qubits : list,
     target_qubit : int
         The required output qubit. Currently only of length 1, could be made a list.
 
-    max_time : int
-    The maximum amount of time in seconds the decoder runs for
+    max_iter : int
+    The maximum amount of iterations the decoder runs for
 
     Returns
     -------
@@ -434,7 +434,7 @@ def generalised_spf_logical_heuristic(tableau, lost_qubits : list,
     
     # find short first logical
 
-    short_first=dc.find_short_first_logical(T_clean,logi_clean)
+    short_first=dc.find_short_first_logical(T_clean,logi_clean,max_iter=max_iter)
 
     if short_first is None: #BP decoder failed
         return result
@@ -445,7 +445,7 @@ def generalised_spf_logical_heuristic(tableau, lost_qubits : list,
         #not need to be short
     
 
-    short_second=dc.find_short_second_logical(T_clean,short_first)
+    short_second=dc.find_short_second_logical(T_clean,short_first,max_iter=max_iter)
 
     if short_second is None:
         return result
@@ -458,7 +458,7 @@ def generalised_spf_logical_heuristic(tableau, lost_qubits : list,
             "z": ta.tableau2paulistring(short_second,indices=indices)
         }
  
-    #TODO: output overlap
+    #TODO: output commutation overlap
 
     return result
 
