@@ -3,8 +3,6 @@ import stabiliser_code as sc
 from ldpc import BpOsdDecoder
 from galois import GF2
 import networkx as nx
-import galois
-from gspf_ilp import create_graph_code
 from tableau import tableau2paulistring
 
 
@@ -13,10 +11,10 @@ def create_error_probs_from_logical(num_qubits,logical,p_base:float=0.1,p_punish
 
     if isinstance(logical,list):
         logical=sc.tableau_list_to_matrix(logical)
-    
+
     if logical.shape[1]//2!=num_qubits:
         raise ValueError("Logical defined for {} qubits. But num_qubits is {}".format(logical.shape//2,num_qubits))
-    
+
     channel_probs = np.full(3 * num_qubits, p_base) #note that this is in (x|z|y) notation
     logical=logical.ravel()
 
@@ -39,7 +37,7 @@ def find_short_first_logical(T,other_logical_repr,CSS:bool=False,max_iter:int=10
 
 
     #decoder problem now takes on representation (x|z|x plus z)
-    #when giving decoder matrix in (x|z|x+z) format and without Omega, the error that is given back is in 
+    #when giving decoder matrix in (x|z|x+z) format and without Omega, the error that is given back is in
     #(z|x|x+z) format!
     #TODO
 
@@ -80,16 +78,16 @@ def find_short_first_logical(T,other_logical_repr,CSS:bool=False,max_iter:int=10
         result = decoder.decode(syndrome_1d)
 
         if result is None or not np.asarray(result).any():
-            return None  
+            return None
         else:
             assert np.array_equal((T @ GF2(result)), syndrome_1d), "decoded result does not reproduce the syndrome"
             assert result.any(), "decoder returned all-zero (no operator found)"
 
     result=result.reshape(1, -1)
-    
+
     return sc.turn_TXZYerror_into_tableau(result)
 
-def find_short_second_logical(T,first_logical,CSS:bool=False,max_iter:int=100,p_base:float=0.1,p_punish:float=0.01): 
+def find_short_second_logical(T,first_logical,CSS:bool=False,max_iter:int=100,p_base:float=0.1,p_punish:float=0.01):
 
     #finds second logical with hopefully small overlap
 
@@ -126,21 +124,48 @@ def find_short_second_logical(T,first_logical,CSS:bool=False,max_iter:int=100,p_
         decoder = BpOsdDecoder(T, channel_probs=channel_probs,
                                 max_iter=max_iter, bp_method="ms",
                                 osd_method="osd_cs", osd_order=6)
-        
+
         result = decoder.decode(syndrome_1d)
 
         if result is None or not np.asarray(result).any():
-            return None   
-        
+            return None
+
         else:
 
             assert np.array_equal((T @ GF2(result)), syndrome_1d), "decoded result does not reproduce the syndrome"
             assert result.any(), "decoder returned all-zero (no operator found)"
-    
+
     result=result.reshape(1, -1)
- 
+
     return sc.turn_TXZYerror_into_tableau(result)
- 
+
+
+def create_graph_code(in_adj : np.array, code_node : int = 0):
+    """create a graph code from an input graph
+    using the 0th node as the input node"""
+
+    num_nodes = in_adj.shape[0]
+    identity = np.identity(num_nodes, dtype = np.uint16)
+    gen = np.hstack([identity, in_adj])
+    zlogi = gen[code_node].copy()
+    zlogi[code_node] = 0
+    neigh = [i for i, ele in enumerate(in_adj[code_node]) if ele ==1]
+
+    assert(len(neigh)>0)
+    xlogi = gen[neigh[0]].copy()
+
+    for ele in neigh[1:]:
+        gen[ele] ^= gen[neigh[0]]
+
+    rows_to_remove = [code_node, neigh[0]]
+    gen = np.delete(gen, rows_to_remove, axis=0)
+
+    gen = np.delete(gen, [code_node, code_node+num_nodes], axis=1)
+    xlogi = np.delete(xlogi, [code_node, code_node+num_nodes])#, axis=1)
+    zlogi = np.delete(zlogi, [code_node, code_node+num_nodes])#, axis=1)
+
+
+    return xlogi, zlogi, gen
 
 
 def main():
@@ -166,7 +191,7 @@ def main():
     #print('xlogical decoder',tableau2paulistring(x))
     short_x=sc.find_anti_commuting_logi_at_O(T,short_z,nonzero[0])
     print('xlogical anticommuting at {}, linear algebra method: '.format(nonzero[0]),(tableau2paulistring(short_x)))
-     
+
     return short_z
 
 

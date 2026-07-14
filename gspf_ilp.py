@@ -378,14 +378,14 @@ def generalised_spf_logical(tableau : np.ndarray, xlogical: list,
     return result
 
 
-def generalised_spf_logical_heuristic(tableau, lost_qubits : list, 
+def generalised_spf_logical_heuristic(tableau, lost_qubits : list,
                     target_qubit:int= None):
     """
     Find a logical satisfying g-SPF algebra of GF2.
 
     Parameters
     ----------
-    tableau : 
+    tableau :
         Tableau of the stabiliser code with stabilisers.
         The representation is X part then Z part ( X | Z ).
 
@@ -410,7 +410,7 @@ def generalised_spf_logical_heuristic(tableau, lost_qubits : list,
     num_stab, m = T.shape
     num_qubits = m // 2
 
- 
+
     #find logical op basis:
 
     _,_,logical_ops=sc.find_logical_op_basis(T,num_qubits)
@@ -431,63 +431,36 @@ def generalised_spf_logical_heuristic(tableau, lost_qubits : list,
         print("logical information destroyed")
         return result
 
-    
+
     # find short first logical
 
     short_first=dc.find_short_first_logical(T_clean,logi_clean)
 
     if short_first is None: #BP decoder failed
         return result
-    
+
     #find second logical
     if target_qubit is not None:
         short_second=sc.find_anti_commuting_logi_at_O(T_clean,short_first,target_qubit) #note that this does
         #not need to be short
-    
+
 
     short_second=dc.find_short_second_logical(T_clean,short_first)
 
     if short_second is None:
         return result
 
- 
+
     result = {
             "success": True,
-             
+
             "x": ta.tableau2paulistring(short_first,indices=indices),
             "z": ta.tableau2paulistring(short_second,indices=indices)
         }
- 
+
     #TODO: output overlap
 
     return result
-
-def create_graph_code(in_adj : np.array, code_node : int = 0):
-    """create a graph code from an input graph
-    using the 0th node as the input node"""
-
-    num_nodes = in_adj.shape[0]
-    identity = np.identity(num_nodes, dtype = np.uint16)
-    gen = np.hstack([identity, in_adj])
-    zlogi = gen[code_node].copy()
-    zlogi[code_node] = 0
-    neigh = [i for i, ele in enumerate(in_adj[code_node]) if ele ==1]
-
-    assert(len(neigh)>0)
-    xlogi = gen[neigh[0]].copy()
-
-    for ele in neigh[1:]:
-        gen[ele] ^= gen[neigh[0]]
-
-    rows_to_remove = [code_node, neigh[0]]
-    gen = np.delete(gen, rows_to_remove, axis=0)
-
-    gen = np.delete(gen, [code_node, code_node+num_nodes], axis=1)
-    xlogi = np.delete(xlogi, [code_node, code_node+num_nodes])#, axis=1)
-    zlogi = np.delete(zlogi, [code_node, code_node+num_nodes])#, axis=1)
-
-
-    return xlogi, zlogi, gen
 
 
 if __name__ == "__main__":
@@ -497,7 +470,7 @@ if __name__ == "__main__":
     # g = nx.cycle_graph(numq)
     g = nx.to_numpy_array(g, dtype = np.uint16)
 
-    xlogi, zlogi, stabi = create_graph_code(g)
+    xlogi, zlogi, stabi = dc.create_graph_code(g)
 
     numq -= 1
     gg = 1

@@ -5,9 +5,8 @@ import networkx as nx
 import matplotlib.pyplot as plt
 from galois import GF2
 import tableau as ta
-from ortools.sat.python import cp_model
 
-from gspf_ilp import create_graph_code, generalised_spf_logical
+from gspf_ilp import generalised_spf_logical
 
 def crazy_graph(width, length, output_node=True):
     graph = nx.Graph()
@@ -252,9 +251,9 @@ if __name__ == "__main__":
 
     fail_list = []
     fit = []
-    num_shots = 5_00
+    num_shots = 5_0
 
-    lost_prob = np.linspace(0,1,10)
+    lost_prob = np.linspace(0,1,11)
     for p in lost_prob:
         print(p)
         fail = 0
