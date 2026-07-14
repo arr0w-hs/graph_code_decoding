@@ -4,7 +4,7 @@ from galois import GF2
 import tableau as ta
 import networkx as nx
 from itertools import product
-from gspf_ilp import create_graph_code
+from decoder_methods import create_graph_code
 
 from ortools.sat.python import cp_model
 
@@ -14,7 +14,7 @@ def lost_indices_to_mask(lost, n_qubits):
 
     lost     : iterable of qubit indices that are lost
     n_qubits : total number of qubits, n
- 
+
     """
     lost = np.atleast_1d(np.asarray(lost, dtype=int))
 
@@ -283,12 +283,12 @@ def make_T_solve_anti_commuting_logi_at_O(T,first_logi,o:int):
 
     first_logi_commute=first_logi.copy()
     first_logi_commute_list=split_stabilizer_except(first_logi_commute,o)
-     
+
 
 
     for l in first_logi_commute_list:
         T=append_logical_to_tableau(T,l)
-        
+
     T=append_logical_to_tableau(T,first_logi_anti_commute)
 
 
@@ -332,7 +332,7 @@ def remove_lost_qubits_from_tableau(T,lost_qubits:list,row_in_T_where_logical_be
 
     if not lost_qubits:
         return T,[],index_array(num_qubits,lost_qubits)
-    
+
     lost = np.asarray(lost_qubits)
     lost_cols = np.concatenate([lost, lost + num_qubits])   # X and Z halves
     T_columns_lost_qubits=T[:,lost_cols]
@@ -344,7 +344,7 @@ def remove_lost_qubits_from_tableau(T,lost_qubits:list,row_in_T_where_logical_be
         coeffs,destroyed_logicals=reduced_row_echelon_form(coeffs,row_in_T_where_logical_begins)
 
     T_update=coeffs@T
-    
+
     if collapse:
         indices=index_array(num_qubits,lost_qubits)
         T_update=kick_out_qubits(T_update,lost_qubits)
@@ -519,14 +519,14 @@ def turn_TXZY_into_tableau(T):
 
     T=to_gf2_tableau(T)
 
-     
+
     num_qubits=T.shape[1]//3
 
     Zblock=T[:,:num_qubits]
     Xblock=T[:,num_qubits:2*num_qubits]
 
     T_new=np.hstack((Xblock,Zblock))
-     
+
 
     return T_new
 
@@ -554,7 +554,7 @@ def main():
     g = nx.to_numpy_array(g, dtype = np.uint16)
 
     xlogi, zlogi, stabi = create_graph_code(g)
-    
+
     print(ta.tableau2paulistring(xlogi))
     # print(len(zlogi))
     #for i in range(stabi.shape[0]):
