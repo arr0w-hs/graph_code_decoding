@@ -108,7 +108,7 @@ previous_meas = [ta.paulistring2tableau(ele, numq) for ele in previous_meas]
 
 target = numq - 1          # output qubit O in tableau columns
 
-# --- cache setup ---
+
 
 def sample_lost_qubits(num_qubits, p, exclude=None, rng=None):
 
@@ -117,7 +117,6 @@ def sample_lost_qubits(num_qubits, p, exclude=None, rng=None):
     # independent Bernoulli(p) loss per qubit
     lost_mask = rng.random(num_qubits) < p
 
-    # qubit exclude(o) is forced not-lost
     if exclude is not None:
         lost_mask[exclude] = False
 
@@ -125,7 +124,7 @@ def sample_lost_qubits(num_qubits, p, exclude=None, rng=None):
 
     return lost_qubits, lost_mask
 
-def compute_threshold(T,lost_prob:np.ndarray=np.linspace(0.1, 0.95, 10),\
+def compute_teleportation_rate(T,p:float,\
                       target_qubit:int=None,max_cache_size:int=None,method:str='heuristic',num_shots:int=500):
     cache = []                  
     
@@ -136,53 +135,49 @@ def compute_threshold(T,lost_prob:np.ndarray=np.linspace(0.1, 0.95, 10),\
     hits = 0
     solves = 0
 
+    success = 0
 
-    for p in lost_prob:
-        
-        success = 0
-
-        for ele in range(num_shots):
-            lq,_ = sample_lost_qubits(num_qubits, p,exclude=target_qubit)
+    for ele in range(num_shots):
+        lq,_ = sample_lost_qubits(num_qubits, p,exclude=target_qubit)
              
-            lost_set = set(int(c) for c in lq)
+        lost_set = set(int(c) for c in lq)
 
-            # --- cache lookup: any stored pattern that avoids all lost qubits? ---
-            hit = False
+        # --- cache lookup: any stored pattern that avoids all lost qubits? ---
+        hit = False
 
-            for supp in cache:
+        for supp in cache:
 
-                if lost_set.isdisjoint(supp):
-                    hit = True
-                    break
+            if lost_set.isdisjoint(supp):
+                hit = True
+                break
 
-            if hit:
-                hits += 1
-                success += 1                      # success (a valid pattern survives)
-                continue
+        if hit:
+            hits += 1
+            success += 1                      # success (a valid pattern survives)
+            continue
         # -------------------------------------------------------------------
 
-            solves += 1
-            if method=='heuristic':
-                res = generalised_spf_logical_heuristic(stabi,  lq, target_qubit=target)
-            elif method=='ILP':
-                res=generalised_spf_logical(stabi,  lq, target_qubit=target)
+        solves += 1
+        if method=='heuristic':
+            res = generalised_spf_logical_heuristic(stabi,  lq, target_qubit=target)
+        elif method=='ILP':
+            res=generalised_spf_logical(stabi,  lq, target_qubit=target)
 
-            else:
-                raise ValueError(f"Method {method} not recognised")
+        else:
+            raise ValueError(f"Method {method} not recognised")
 
-            if res["success"]:
-                success += 1
-                # --- cache the found pattern (full-width x, z) ---
+        if res["success"]:
+            success += 1
+            # --- cache the found pattern (full-width x, z) ---
              
-                supp = ta.pair_support(res["x"], res["z"], numq, target)
-                if supp is not None and supp not in cache:
-                    cache.append(supp)
-                    if len(cache) > max_cache_size:
-                        cache.pop(0)         # FIFO eviction
+            supp = ta.pair_support(res["x"], res["z"], numq, target)
+            if supp is not None and supp not in cache:
+                cache.append(supp)
+                if len(cache) > max_cache_size:
+                    cache.pop(0)         # FIFO eviction
             # ------------------------------------------------
 
-        teleportation_rate.append(success/num_shots)
-    
+    teleportation_rate=success/num_shots
 
     print(f"cache hits: {hits}, solves: {solves}, hit rate: {hits/(hits+solves):.3f}")
 
