@@ -334,15 +334,66 @@ def make_T_solve_anti_commuting_logi_at_O(T,first_logi,o:int):
 
     return T,syndrome
 
-def find_anti_commuting_logi_at_O(T,first_logi,o): #TODO: currently only works for one logical qubit
+def find_anti_commuting_logi_at_O(T,first_logi,accidental_logicals,o): #TODO: currently only works for one logical qubit
 
     num_qubits=T.shape[1]//2
+
+ 
+    for l in accidental_logicals:
+        T=append_logical_to_tableau(T,l) #make second logical commute with all accidental logical so we are not in that coset
+        
     T_solve,syndrome=make_T_solve_anti_commuting_logi_at_O(T,first_logi,o)
     T_solve = T_solve@GF2(construct_Omega_Matrix(num_qubits).astype(np.int64))
     v = solve_gf2(T_solve, syndrome)
     if v is None:
         return None                          # no such logical exists
     return v
+
+def symplectic_basis(logicals, n_qubits):
+    """
+    Given a linear basis of logical operators (each (x|z), length 2n),
+    return a symplectic basis: a list of conjugate pairs [(X0,Z0),(X1,Z1),...]
+    where Xi anticommutes with Zi and commutes with all other basis elements.
+    """
+    Omega = GF2(construct_Omega_Matrix(n_qubits).astype(np.int64))
+
+    def sp(a, b):
+        a = GF2(np.asarray(a).reshape(1, -1).astype(int))
+        b = GF2(np.asarray(b).reshape(-1, 1).astype(int))
+        return int((a @ Omega @ b).ravel()[0])
+
+    # working list of GF2 row vectors
+    ops = [GF2(np.asarray(l).ravel().astype(int)) for l in logicals]
+    pairs = []
+
+    while ops:
+        a = ops.pop(0)
+        # find a partner in ops that anticommutes with a
+        partner_idx = None
+        for i, b in enumerate(ops):
+            if sp(a, b) == 1:
+                partner_idx = i
+                break
+        if partner_idx is None:
+            # a commutes with everything remaining -> it's dependent / not part of a pair
+            # (shouldn't happen for a proper logical basis; skip it)
+            continue
+        b = ops.pop(partner_idx)
+
+        # now clear the (a,b) symplectic charge from all remaining ops so they
+        # commute with both a and b
+        new_ops = []
+        for c in ops:
+            # remove component along the (a,b) pair
+            if sp(c, b) == 1:      # c anticommutes with b -> has 'a-like' part
+                c = c + a
+            if sp(c, a) == 1:      # c anticommutes with a -> has 'b-like' part
+                c = c + b
+            new_ops.append(c)
+        ops = new_ops
+        pairs.append((a, b))
+
+    return pairs
 
 def index_array(n:int, lost:list):
     """
@@ -509,18 +560,18 @@ def add_measurements_to_tableau(T,measurements):
     pass
 
 
-def find_logical_op_basis(tableau_matrix,n_qubits): #idk if this could be super slow
+def find_logical_op_basis(tableau_matrix,n_qubits,CSS:bool=False): #idk if this could be super slow
 
     T = GF2(tableau_matrix)      # numpy array of 0/1
 
-    is_CSS = np.all(T[:n_qubits, n_qubits:] == 0) and np.all(T[n_qubits:, :n_qubits] == 0)
+    
     #TODO: put this in other places?
 
-    if is_CSS: #convention: T=((H_x,0),(0,H_z))
+    if CSS: #convention: T=((H_x,0),(0,H_z))
         T_x=T[:n_qubits,:n_qubits]
         T_z= T[n_qubits:,n_qubits:]
-        Z_logicals=find_ker_minus_rowspace(T_x,CSS=is_CSS)
-        X_logicals=find_ker_minus_rowspace(T_z,CSS=is_CSS)
+        Z_logicals=find_ker_minus_rowspace(T_x,CSS=CSS)
+        X_logicals=find_ker_minus_rowspace(T_z,CSS=CSS)
         n_zeros= GF2(np.zeros(n_qubits, dtype=int))
 
         for i in range(len(Z_logicals)):
@@ -535,22 +586,27 @@ def find_logical_op_basis(tableau_matrix,n_qubits): #idk if this could be super 
     else:
 
 
-        logicals=find_ker_minus_rowspace(T,CSS=is_CSS) #TODO check if working correctly
+        logicals=find_ker_minus_rowspace(T,CSS=CSS) #TODO check if working correctly
 
         return None,None,logicals
 
 
-def turn_tableau_into_TXZY(T): #turns into (x|z|x+z) string
-    T=to_gf2_tableau(T)
-    num_qubits=T.shape[1]//2
-    Yblock=np.zeros((T.shape[0],num_qubits),dtype=np.int64)
+def turn_tableau_into_TXZY(T): #robust version
+    T = to_gf2_tableau(T)
 
-    Yblock=T[:,:num_qubits]^T[:,num_qubits:]
+    if T.ndim == 1:
+        num_qubits = T.shape[0] // 2
+        x_part = T[:num_qubits]
+        z_part = T[num_qubits:]
+        yblock = x_part ^ z_part
+        return to_gf2_tableau(np.concatenate([T, yblock]))
 
-    Yblock=to_gf2_tableau(Yblock)
-    T=np.hstack((T,Yblock))
+    if T.ndim == 2:
+        num_qubits = T.shape[1] // 2
+        yblock = T[:, :num_qubits] ^ T[:, num_qubits:]
+        return to_gf2_tableau(np.hstack([T, yblock]))
 
-    return T
+    raise ValueError(f"expected 1D or 2D tableau, got ndim={T.ndim}")
 
 def turn_TXZY_into_tableau(T):
 

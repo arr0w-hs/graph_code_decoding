@@ -15,8 +15,11 @@ def create_error_probs_from_logical(num_qubits,logical,p_base:float=0.1,p_punish
 
     if logical.shape[1]//2!=num_qubits:
         raise ValueError("Logical defined for {} qubits. But num_qubits is {}".format(logical.shape//2,num_qubits))
-
+    
+     
     channel_probs = np.full(3 * num_qubits, p_base) #note that this is in (x|z|y) notation
+
+     
     logical=logical.ravel()
 
     try:
@@ -32,9 +35,101 @@ def create_error_probs_from_logical(num_qubits,logical,p_base:float=0.1,p_punish
 
     return channel_probs
 
+def make_given_logical_unlikely(channel_probs, num_qubits, logical, p_punish: float = 0.2):
+    """
+    Punish the decoder channel on the TXZY support of a found solution vector `logical`
+    (x|z repr), so BP+OSD avoids returning that same vector again. In place.
+    """
+    logical = sc.to_gf2_tableau(logical)
+
+    if logical.ndim == 2 and logical.shape[1] // 2 != num_qubits:
+        raise ValueError(f"Logical on {logical.shape[1]//2} qubits, but num_qubits is {num_qubits}")
+    if logical.ndim == 1 and logical.shape[0] // 2 != num_qubits:
+        raise ValueError(f"Logical on {logical.shape[0]//2} qubits, but num_qubits is {num_qubits}")
+
+    assert channel_probs.ravel().shape[0] == 3 * num_qubits, \
+        f"channel_probs must have {3*num_qubits} entries"
+
+    logical_txzy = sc.turn_tableau_into_TXZY(logical)     
+    nonzero = np.asarray(logical_txzy).ravel().astype(bool)
+
+    channel_probs[nonzero] = p_punish
+
+    return channel_probs
+
+def bias_channel_toward_qubit(channel_probs, o, n_qubits, p_low=0.2, p_high=0.3):
+    channel_probs = np.asarray(channel_probs, dtype=float).copy()
+    rng = np.random.default_rng()
+    channel_probs[o]              = rng.uniform(p_low, p_high)  # X at O
+    channel_probs[o + n_qubits]   = rng.uniform(p_low, p_high)  # Z at O
 
 
-def find_short_first_logical(T,other_logical_repr,CSS:bool=False,max_iter:int=100): #TODO: what happens if result is None? This may happen?
+    channel_probs[o + 2*n_qubits] =0  # Y at O
+    return channel_probs
+
+
+
+def find_first_short_logical_in_coset(T, logi_commute, logi_anticommute,
+                                       accidental_logicals, o=None,
+                                       max_iter=100, channel_probs=None):
+
+    if sc.rank_F2(T) < T.shape[0]:
+        raise ValueError('T not full rank')
+
+    n_qubits = T.shape[1] // 2
+    T = sc.to_gf2_tableau(T)
+
+    logi_anticommute = sc.to_gf2_tableau(np.asarray(logi_anticommute).ravel())
+    logi_commute = sc.to_gf2_tableau(np.asarray(logi_commute).ravel())
+    accidental_logicals = [sc.to_gf2_tableau(np.asarray(a).ravel()) for a in accidental_logicals]
+     
+    if channel_probs is None:
+        channel_probs = np.full(3 * n_qubits, 0.1)
+
+    if o is not None:
+        channel_probs = bias_channel_toward_qubit(channel_probs, o, n_qubits)
+
+    T_aug = T
+    for acc in accidental_logicals:
+        T_aug = sc.append_logical_to_tableau(T_aug, acc)
+
+    T_aug = sc.append_logical_to_tableau(T_aug, logi_commute)
+    T_aug = sc.append_logical_to_tableau(T_aug, logi_anticommute)
+    T_aug = sc.turn_tableau_into_TXZY(T_aug)
+
+    r = sc.rank_F2(T_aug)
+    if r < T_aug.shape[0]:
+        print(f"T_aug rank deficient after appends: {r} < {T_aug.shape[0]}")
+
+    syndrome = np.zeros(T_aug.shape[0], dtype=int)
+    syndrome[-1] = 1
+    syndrome_1d = syndrome.astype(np.uint8)
+    channel_probs = np.full(3 * n_qubits, 0.1) #test 
+    decoder = BpOsdDecoder(T_aug, channel_probs=channel_probs,
+                            max_iter=max_iter, bp_method="ms",
+                            osd_method="osd_cs", osd_order=6)
+    result = decoder.decode(syndrome_1d)
+
+    if result is None or not np.asarray(result).any():
+        return None, channel_probs
+
+    actual = np.asarray(T_aug @ GF2(result.reshape(-1, 1))).ravel()
+    if not np.array_equal(np.asarray(actual).astype(int), np.asarray(syndrome_1d).astype(int)):
+        return None, channel_probs
+
+    result_tab = sc.turn_TXZYerror_into_tableau(result.reshape(1, -1))
+    print(tableau2paulistring(result_tab))
+    print('o', o)
+    v = np.asarray(result_tab).ravel().astype(int)
+    
+
+    if o is not None and not (v[o] or v[o + n_qubits]):
+        return None, channel_probs
+
+    return sc.to_gf2_tableau(v.reshape(1, -1)), channel_probs
+ 
+
+def find_short_first_logical(T,other_logical_repr,CSS:bool=False,max_iter:int=100,channel_probs=None): #TODO: what happens if result is None? This may happen?
 
 
     #decoder problem now takes on representation (x|z|x plus z)
@@ -71,7 +166,8 @@ def find_short_first_logical(T,other_logical_repr,CSS:bool=False,max_iter:int=10
         pass
 
     else:
-        channel_probs = np.full(3 * n_qubits, 0.1)
+        if channel_probs is None:
+            channel_probs = np.full(3 * n_qubits, 0.1)
 
         decoder = BpOsdDecoder(T, channel_probs=channel_probs,
                                 max_iter=max_iter, bp_method="ms",
@@ -79,16 +175,80 @@ def find_short_first_logical(T,other_logical_repr,CSS:bool=False,max_iter:int=10
         result = decoder.decode(syndrome_1d)
 
         if result is None or not np.asarray(result).any():
-            return None
+            return None,channel_probs
         else:
             assert np.array_equal((T @ GF2(result)), syndrome_1d), "decoded result does not reproduce the syndrome"
             assert result.any(), "decoder returned all-zero (no operator found)"
 
     result=result.reshape(1, -1)
 
-    return sc.turn_TXZYerror_into_tableau(result)
+    return sc.turn_TXZYerror_into_tableau(result),channel_probs
 
-def find_short_second_logical(T,first_logical,CSS:bool=False,max_iter:int=100,p_base:float=0.1,p_punish:float=0.01):
+"""def find_first_short_logical_in_coset(T, logi_anticommute, logi_commute,
+                                 o=None, max_iter=100, channel_probs=None):
+
+    if sc.rank_F2(T) < T.shape[0]:
+        raise ValueError('T not full rank')
+
+    n_qubits = T.shape[1] // 2
+    T = sc.to_gf2_tableau(T)
+
+    logi_anticommute = sc.to_gf2_tableau(np.asarray(logi_anticommute).ravel())
+    logi_commute = sc.to_gf2_tableau(np.asarray(logi_commute).ravel())
+
+    if channel_probs is None:
+        channel_probs = np.full(3 * n_qubits, 0.1)
+
+    if o is None:
+        o_constraints = [[]]
+    else:
+        detect_x_at_o = GF2(np.zeros(2 * n_qubits, dtype=int))
+        detect_x_at_o[o + n_qubits] = 1
+        detect_z_at_o = GF2(np.zeros(2 * n_qubits, dtype=int))
+        detect_z_at_o[o] = 1
+        o_constraints = [
+            [detect_x_at_o],
+            [detect_z_at_o],
+            [detect_x_at_o, detect_z_at_o],
+        ]
+
+    for constraint_rows in o_constraints:
+
+        T_aug = sc.append_logical_to_tableau(T, logi_commute)
+        for row in constraint_rows:
+            T_aug = sc.append_logical_to_tableau(T_aug, row)
+        T_aug = sc.append_logical_to_tableau(T_aug, logi_anticommute)
+        T_aug = sc.turn_tableau_into_TXZY(T_aug)
+
+        syndrome = np.zeros(T_aug.shape[0], dtype=int)
+        syndrome[-1] = 1
+        for k in range(len(constraint_rows)):
+            syndrome[-(2 + k)] = 1
+        syndrome_1d = syndrome.flatten().astype(np.uint8)
+
+        decoder = BpOsdDecoder(T_aug, channel_probs=channel_probs,
+                                max_iter=max_iter, bp_method="ms",
+                                osd_method="osd_cs", osd_order=6)
+        result = decoder.decode(syndrome_1d)
+
+        if result is None or not np.asarray(result).any():
+            continue
+
+        assert np.array_equal((T_aug @ GF2(result)), syndrome_1d), "decoded result does not reproduce the syndrome"
+
+        result_tab = sc.turn_TXZYerror_into_tableau(result.reshape(1, -1))
+
+        if o is None:
+            return result_tab, channel_probs
+
+        sf = np.asarray(result_tab).ravel().astype(int)
+        if sf[o] or sf[o + n_qubits]:
+            return result_tab, channel_probs
+
+    return None, channel_probs"""
+
+def find_short_second_logical(T,first_logical,CSS:bool=False,\
+                              max_iter:int=100,p_base:float=0.1,p_punish:float=0.01):
 
     #finds second logical with hopefully small overlap
 
@@ -120,8 +280,8 @@ def find_short_second_logical(T,first_logical,CSS:bool=False,max_iter:int=100,p_
         pass
 
     else:
-        channel_probs = create_error_probs_from_logical(n_qubits,first_logical,p_base=p_base,p_punish=p_punish)
-
+        
+        channel_probs =create_error_probs_from_logical(n_qubits,first_logical)
         decoder = BpOsdDecoder(T, channel_probs=channel_probs,
                                 max_iter=max_iter, bp_method="ms",
                                 osd_method="osd_cs", osd_order=6)

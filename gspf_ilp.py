@@ -393,11 +393,7 @@ def generalised_spf_logical(tableau : np.ndarray,
             "bz": np.array([solver.Value(bz[i]) for i in range(num_stab_remain)], dtype=int),
         }
 
-        # print("Minimum support:", result["objective"])
-        # print("mod2 vector:", z)
-        # print("support:", result["support_size"])
-        # print(ta.tableau2paulistring(z))
-        # print(ta.tableau2paulistring(x))
+     
 
     else:
         result = {
@@ -415,88 +411,212 @@ def generalised_spf_logical(tableau : np.ndarray,
     return result
 
 
-def generalised_spf_logical_heuristic(tableau, lost_qubits : list,
-                    target_qubit:int= None,max_iter:int=100):
-    """
-    Find a logical satisfying g-SPF algebra of GF2.
-
-    Parameters
-    ----------
-    tableau :
-        Tableau of the stabiliser code with stabilisers.
-        The representation is X part then Z part ( X | Z ).
 
 
-    lost_qubits : list
-        A list of length all the known lost qubits. [0,1,2] means qubit 0,1 and 2 are lost
+def generalised_spf_logical_heuristic(tableau, lost_qubits: list,
+                    target_qubit: int = None, anti_commut_iter: int = 100,
+                    return_reduced_form: bool = False,
+                    max_iter: int = 100):
 
-    target_qubit : int
-        The required output qubit. Currently only of length 1, could be made a list.
-
-    max_iter : int
-    The maximum amount of iterations the decoder runs for
-
-    Returns
-    -------
-    A loss-tolerant representation of the 'logical' minimising g heuristically
-
-    """
+    result = {
+        "success": False,
+        "status": None,
+        "status_name": None,
+        "objective": None,
+        "x": None,
+        "z": None,
+        "support_size": None,
+        "bx": None,
+        "bz": None,
+    }
 
     T = sc.to_gf2_tableau(tableau)
-
     num_stab, m = T.shape
     num_qubits = m // 2
 
-
-    #find logical op basis:
-
-    _,_,logical_ops=sc.find_logical_op_basis(T,num_qubits)
-    logical_repr=logical_ops[0]
-
-    #remove lost qubits
-
-    T_clean,indices=sc.remove_lost_qubits_from_tableau(T,lost_qubits)
-    logi_clean,indices=sc.find_clean_logical(T,logical_repr,lost_qubits)
-
-    result = {
-            "success": False,
-            "x":None,
-            "z":None
-        }
-
-    if logi_clean is None:
-        print("logical information destroyed")
-        return result
-
-
-    # find short first logical
-
-    short_first=dc.find_short_first_logical(T_clean,logi_clean,max_iter=max_iter)
-
-    if short_first is None: #BP decoder failed
-        return result
-
-    #find second logical
+    assert m % 2 == 0, "Tableau length must be even"
+    assert all(0 <= x <= num_qubits - 1 for x in lost_qubits), \
+        f"Lost qubits must be indices in 0..{num_qubits-1}"
     if target_qubit is not None:
-        short_second=sc.find_anti_commuting_logi_at_O(T_clean,short_first,target_qubit) #note that this does
-        #not need to be short
+        assert target_qubit < num_qubits, \
+            f"Target qubit must be in range 0..{num_qubits-1}"
 
+    _, _, logical_ops = sc.find_logical_op_basis(T, num_qubits)
+    assert len(logical_ops) == 2, \
+        f"Expected one logical qubit, got {len(logical_ops)//2}"
+    logical_repr_commute = sc.to_gf2_tableau(logical_ops[0])
+    logical_repr_anticommute=sc.to_gf2_tableau(logical_ops[1])
+
+    logi_commute_clean, logi_indices = sc.find_clean_logical(T, logical_repr_commute, lost_qubits)
+    logi_anticommute_clean,logi_indices=sc.find_clean_logical(T, logical_repr_anticommute, lost_qubits)
+   
+
+    if logi_commute_clean is None or logi_anticommute_clean is None:
+        return result
+    
+
+    T_clean, _, indices = sc.remove_lost_qubits_from_tableau(T, lost_qubits)
+
+    assert np.array_equal(logi_indices, indices), "clean/reduce index mismatch"
+
+    num_stab_remain, m_remain = T_clean.shape
+    num_qubits_remain = m_remain // 2
+
+    """Omega = GF2(sc.construct_Omega_Matrix(num_qubits_remain).astype(np.int64))
+    lc = GF2(np.asarray(logi_commute_clean).reshape(1,-1).astype(int))
+    la = GF2(np.asarray(logi_anticommute_clean).reshape(-1,1).astype(int))
+    print("logi_commute vs logi_anticommute symplectic:", int((lc @ Omega @ la).ravel()[0]))
+
+    assert sc.rank_F2(T_clean) == num_stab_remain, \
+        f"reduced tableau not full rank: {sc.rank_F2(T_clean)} != {num_stab_remain}"""
+
+    target_reduced = None
+    if target_qubit is not None:
+        if target_qubit not in indices:
+            return result
+        target_reduced = int(np.where(indices == target_qubit)[0][0])
+
+    _, _, reduced_logicals = sc.find_logical_op_basis(T_clean, num_qubits_remain)
+
+    # ---- build accidental symplectic basis (REPLACES the old rank-filter loop) ----
+    Omega = GF2(sc.construct_Omega_Matrix(num_qubits_remain).astype(np.int64))
+
+    def sp(a, b):
+        a = GF2(np.asarray(a).reshape(1, -1).astype(int))
+        b = GF2(np.asarray(b).reshape(-1, 1).astype(int))
+        return int((a @ Omega @ b).ravel()[0])
+
+    Xy = GF2(np.asarray(logi_commute_clean).ravel().astype(int))
+    Zy = GF2(np.asarray(logi_anticommute_clean).ravel().astype(int))
+
+    acc_raw = []
+    for lg in reduced_logicals:
+        c = GF2(np.asarray(lg).ravel().astype(int))
+        if sp(c, Zy) == 1:
+            c = c + Xy
+        if sp(c, Xy) == 1:
+            c = c + Zy
+        if np.asarray(c).any():
+            acc_raw.append(c)
+
+    acc_pairs = sc.symplectic_basis(acc_raw, num_qubits_remain)
+
+    accidentals = []
+    for (Xa, Za) in acc_pairs:
+        accidentals.append(sc.to_gf2_tableau(np.asarray(Xa).ravel()))
+        accidentals.append(sc.to_gf2_tableau(np.asarray(Za).ravel()))
+    # ---- end accidental construction ----
+
+    """# (optional) verification asserts
+    full_set = GF2(np.vstack([
+        np.asarray(T_clean).astype(int),
+        np.asarray(logi_commute_clean).reshape(1, -1).astype(int),
+        np.asarray(logi_anticommute_clean).reshape(1, -1).astype(int),
+    ] + [np.asarray(a).reshape(1, -1).astype(int) for a in accidentals]))
+    n_log = num_qubits_remain - sc.rank_F2(T_clean)
+    assert sc.rank_F2(full_set) == num_stab_remain + 2*n_log, \
+        f"appended set does not span full logical space"""
+
+    short_first, channel_probs = dc.find_first_short_logical_in_coset(
+        T_clean, logi_anticommute=logi_anticommute_clean, logi_commute=logi_commute_clean,
+        accidental_logicals=accidentals, o=target_reduced, max_iter=max_iter)
+    
+    if short_first is None:
+        return result
+ 
+
+    """sf = np.asarray(short_first).ravel().astype(int)
+    # the logical short_first should represent (the one it's pinned to):
+    intended = np.asarray(logi_commute_clean).ravel().astype(int)   # or whichever it's meant to be
+    diff = (sf + intended) % 2
+    basis = GF2(np.vstack([np.asarray(T_clean).astype(int), diff.reshape(1, -1).astype(int)]))
+    in_coset = sc.rank_F2(basis) == sc.rank_F2(T_clean)
+    print("short_first in intended coset:", in_coset, " weight:", int(sf.sum()))"""
+    
+    """print('short first',ta.tableau2paulistring(short_first))
+    print('logi_anti_commute_clean',ta.tableau2paulistring(logi_anticommute_clean))"""
+
+    if target_reduced is not None:
+        short_second = sc.find_anti_commuting_logi_at_O(T_clean, short_first,accidentals, target_reduced)
+        if short_second is None:
+            channel_probs = dc.make_given_logical_unlikely(channel_probs, num_qubits_remain, short_first)
+            for i in range(anti_commut_iter):
+                short_first, channel_probs = dc.find_first_short_logical_in_coset(T_clean, logi_anticommute=logi_anticommute_clean,\
+                    logi_commute=logi_commute_clean,accidental_logicals=accidentals, o=target_reduced, max_iter=max_iter)
+
+                if short_first is None:
+                    short_second = None
+                    break
+
+                short_second = sc.find_anti_commuting_logi_at_O(T_clean, short_first,accidentals, target_reduced)
+                if short_second is not None:
+                    break
+                else:
+                    channel_probs = dc.make_given_logical_unlikely(channel_probs, num_qubits_remain, short_first)
     else:
-        short_second=dc.find_short_second_logical(T_clean,short_first,max_iter=max_iter)
+        short_second = dc.find_short_second_logical(T_clean, short_first, max_iter=max_iter)
 
     if short_second is None:
         return result
+    
+    """# ---- commutation validation ----
+    Omega_r = GF2(sc.construct_Omega_Matrix(num_qubits_remain).astype(np.int64))
 
+    def _symp(a, b):
+        a = GF2(np.asarray(a).reshape(1, -1).astype(int))
+        b = GF2(np.asarray(b).reshape(-1, 1).astype(int))
+        return int((a @ Omega_r @ b).ravel()[0])
+
+    # short_first should anticommute with logi_anticommute_clean, commute with logi_commute_clean
+    assert _symp(short_first, logi_anticommute_clean) == 1, \
+        "short_first does NOT anticommute with the anticommute logical"
+    assert _symp(short_first, logi_commute_clean) == 0, \
+        "short_first does NOT commute with the commute logical"
+
+    # short_second should commute with logi_commute_clean (it's the partner conjugate side)
+    # and both should commute with every accidental logical
+    for acc in accidentals:
+        assert _symp(short_first, acc) == 0, \
+            "short_first anticommutes with an accidental logical (coset not pinned)"
+        assert _symp(short_second, acc) == 0, \
+            "short_second anticommutes with an accidental logical (coset not pinned)"
+
+    # the pair must anticommute at O and commute qubit-wise elsewhere (Box 1)
+    if target_reduced is not None:
+        sf_ = np.asarray(short_first).ravel().astype(int)
+        ss_ = np.asarray(short_second).ravel().astype(int)
+        for q in range(num_qubits_remain):
+            anti_q = (sf_[q] & ss_[q+num_qubits_remain]) ^ (sf_[q+num_qubits_remain] & ss_[q])
+            if q == target_reduced:
+                assert anti_q == 1, f"pair does NOT anticommute at O ({target_reduced})"
+            else:
+                assert anti_q == 0, f"pair anticommutes at non-O qubit {q}"
+    
+    sf = np.asarray(short_first).ravel().astype(int)
+    ss = np.asarray(short_second).ravel().astype(int)
+    sf_supp = [q for q in range(num_qubits_remain) if sf[q] or sf[q+num_qubits_remain]]
+    ss_supp = [q for q in range(num_qubits_remain) if ss[q] or ss[q+num_qubits_remain]]
+    print("short_first support:", sf_supp, "short_second support:", ss_supp, "O:", target_reduced)"""
+
+    x = sc.to_gf2_tableau(np.asarray(short_first).ravel())
+    z = sc.to_gf2_tableau(np.asarray(short_second).ravel())
+
+
+    if not return_reduced_form:
+        x = sc.restore_lost_qubits(x, indices, num_qubits)
+        z = sc.restore_lost_qubits(z, indices, num_qubits)
 
     result = {
-            "success": True,
-
-            "x": ta.tableau2paulistring(short_first,indices=indices),
-            "z": ta.tableau2paulistring(short_second,indices=indices)
-        }
-
-    #TODO: output commutation overlap
-
+        "success": True,
+        "status": None,
+        "status_name": "heuristic",
+        "objective": None,
+        "x": x,
+        "z": z,
+        "support_size": None,
+        "bx": None,
+        "bz": None,
+    }
     return result
 
 
