@@ -192,11 +192,7 @@ def sample_lost_nodes(in_adj : np.ndarray , loss_probability):
         if node != 0 and node != last_node
     ]
 
-    return [
-        node
-        for node in eligible_nodes
-        if rng.random() < loss_probability
-    ]
+    return [node for node in eligible_nodes if rng.random() < loss_probability]
 
 
 
@@ -226,58 +222,52 @@ def create_graph_code_based_on_spf(in_adj : np.array, code_node : int = 0):
     return xlogi, zlogi, gen
 
 if __name__ == "__main__":
-    print()
+    from stabiliser_code import create_graph_code
 
-    # g = hexagonal_lattice(4,4)
-    # plt.figure()
-    # nx.draw_networkx(g)
-    # plt.show()
-    g = crazy_graph(4,4)
-    # g = triangular_lattice(4,4)
-    # g = nx.path_graph(5)
-    g = nx.to_numpy_array(g, dtype = np.uint16)
-    numq = g.shape[0]
-    xlogi, zlogi, stabi = create_graph_code_based_on_spf(g)
-
-    # print((xlogi))
-    # print((zlogi), "\n")
-    # for ele in stabi:
-    #     print((ele))
-
-    gg = 1
-    previous_meas = []
-    previous_meas = [ta.paulistring2tableau(ele, numq) for ele in previous_meas]
-    T = GF2(stabi)
-
-    fail_list = []
-    fit = []
-    num_shots = 5_0
-
-    lost_prob = np.linspace(0,1,11)
-    for p in lost_prob:
-        print(p)
-        fail = 0
-
-        for ele in range(num_shots):
-            lq = sample_lost_nodes(g, p)
-            lost_qubits = [0]*2*numq
-            for ele in lq:
-                lost_qubits[ele] = 1
-                lost_qubits[ele+numq] = 1
-
-            res = generalised_spf_logical(stabi, xlogi, zlogi, previous_meas, lost_qubits, gg, target_qubit=numq)
-            if res["success"]:
-                fail += 1
-
-        fail_list.append(fail/num_shots)
-        fit.append((1-p**4)**4)
-
-    fail_list = np.asarray(fail_list)
-    yerr =  np.sqrt(fail_list * (1 - fail_list) / num_shots)
 
     plt.figure()
-    # plt.plot(lost_prob, fail_list)
-    plt.errorbar(lost_prob, fail_list, yerr=yerr, fmt = "o", label = "g-SPF")
-    plt.plot(lost_prob, fit, label = r"Fit $(1-p^{4})^{4}$")
-    plt.legend()
+
+    for i in [2,3,4]:
+        g = triangular_lattice(i,i)
+        g = nx.to_numpy_array(g, dtype = np.uint16)
+        numq = g.shape[0]-1
+        xlogi, zlogi, stabi = create_graph_code(g)
+        gg = 1
+        previous_meas = []
+        previous_meas = [ta.paulistring2tableau(ele, numq) for ele in previous_meas]
+        T = GF2(stabi)
+
+        fail_list = []
+        fit = []
+        num_shots = 5_000
+
+        lost_prob = np.linspace(0,1,21)
+        for p in lost_prob:
+            # print(p)
+            fail = 0
+
+            for ele in range(num_shots):
+                lq = sample_lost_nodes(g, p)
+                lost_qubits = [0]*2*numq
+                for ele in lq:
+                    lost_qubits[ele] = 1
+                    lost_qubits[ele+numq] = 1
+
+                res = generalised_spf_logical(stabi, xlogi, zlogi, previous_meas, lost_qubits, gg, target_qubit=numq)
+                if res["success"]:
+                    fail += 1
+
+            fail_list.append(fail/num_shots)
+            # fit.append((1-p**i)**i)
+
+        fail_list = np.asarray(fail_list)
+        yerr =  np.sqrt(fail_list * (1 - fail_list) / num_shots)
+
+
+        plt.title("Threshold plot for traingular lattice")
+        # plt.plot(lost_prob, fail_list)
+        plt.errorbar(lost_prob, fail_list, yerr=yerr, fmt = "o-", label = f"channel is {i}x{i}")
+        # plt.plot(lost_prob, fail_list, label = r"Fit $(1-p^{4})^{4}$")
+        # plt.plot(lost_prob, fail_list, label = f"channel is {i}x{i}")
+        plt.legend()
     plt.show()
