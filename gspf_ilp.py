@@ -431,7 +431,7 @@ def generalised_spf_logical_heuristic(tableau, lost_qubits: list,
     }
 
     T = sc.to_gf2_tableau(tableau)
-    num_stab, m = T.shape
+    _, m = T.shape
     num_qubits = m // 2
 
     assert m % 2 == 0, "Tableau length must be even"
@@ -524,6 +524,7 @@ def generalised_spf_logical_heuristic(tableau, lost_qubits: list,
     That is a pure linear algebra method. Additional logicals is passed so that the anti-commuting logical is not
     one of the new additional logicals. If no solution is find, a new first logical is found. The BP decoder is intiialised
     with probabiltiies that make the previously found logical unlikely."""
+
     if target_reduced is not None:
         short_second = sc.find_anti_commuting_logi_at_O(T_clean, short_first,additional_logicals, target_reduced)
         if short_second is None:
@@ -570,12 +571,11 @@ def generalised_spf_logical_heuristic(tableau, lost_qubits: list,
     }
     return result
 
-def 
 
 
 if __name__ == "__main__":
 
-    numq = 10
+    """numq = 10
     g = nx.erdos_renyi_graph(numq, 0.7)
     # g = nx.cycle_graph(numq)
     g = nx.to_numpy_array(g, dtype = np.uint16)
@@ -602,6 +602,6 @@ if __name__ == "__main__":
 
 
     T = GF2(stabi)
-    generalised_spf_logical(stabi, xlogi, zlogi, previous_meas, lost_qubits, gg, target_qubit=None)
+    generalised_spf_logical(stabi, xlogi, zlogi, previous_meas, lost_qubits, gg, target_qubit=None)"""
 
    
