@@ -74,7 +74,7 @@ for i in [2, 3, 4, 5]:
 
     fail_list = Parallel(n_jobs=-1)(
         delayed(run_p)(arg) for arg in args
-    )
+    ) #can we make them communicate somehow?
 
     fail_list = np.asarray(fail_list)
     yerr = np.sqrt(fail_list * (1 - fail_list) / num_shots)
@@ -109,74 +109,86 @@ previous_meas = [ta.paulistring2tableau(ele, numq) for ele in previous_meas]
 target = numq - 1          # output qubit O in tableau columns
 
 # --- cache setup ---
-cache = []                 # list of frozenset(support columns), full-tableau frame
-max_cache = 1000
 
-def pair_support(x, z, num_qubits, target_qubit):
-    x = np.asarray(x).ravel().astype(int)
-    z = np.asarray(z).ravel().astype(int)
-    supp = set()
-    for q in range(num_qubits):
-        if q == target_qubit:
-            continue
-        if x[q] or x[q+num_qubits] or z[q] or z[q+num_qubits]:
-            supp.add(q)
-    if len(supp) == 0:
-        return None          # supported only at O — valid success, not a cacheable pattern
-    return frozenset(supp)
-# -------------------
+def sample_lost_qubits(num_qubits, p, exclude=None, rng=None):
 
-fail_list = []
-fit = []
-num_shots = 5_00
+    rng = np.random.default_rng(rng)
 
-hits = 0
-solves = 0
+    # independent Bernoulli(p) loss per qubit
+    lost_mask = rng.random(num_qubits) < p
 
-lost_prob = np.linspace(0.1, 0.95, 10)
-for p in lost_prob:
-    print(p)
-    fail = 0
+    # qubit exclude(o) is forced not-lost
+    if exclude is not None:
+        lost_mask[exclude] = False
 
-    for ele in range(num_shots):
-        lq = sample_lost_nodes(g, p)
-        lost_cols = [node - 1 for node in lq]
-        lost_set = set(int(c) for c in lost_cols)
+    lost_qubits = np.flatnonzero(lost_mask)
 
-        # --- cache lookup: any stored pattern that avoids all lost qubits? ---
-        hit = False
+    return lost_qubits, lost_mask
 
-        for supp in cache:
-            if lost_set.isdisjoint(supp):
-                
-                hit = True
-                break
+def compute_threshold(T,lost_prob:np.ndarray=np.linspace(0.1, 0.95, 10),\
+                      target_qubit:int=None,max_cache_size:int=None,method:str='heuristic',num_shots:int=500):
+    cache = []                  
+    
+    num_qubits=T.shape[1]//2
+ 
+    teleportation_rate = []
+   
+    hits = 0
+    solves = 0
 
-        if hit:
-            hits += 1
-            fail += 1                      # success (a valid pattern survives)
-            continue
+
+    for p in lost_prob:
+        
+        success = 0
+
+        for ele in range(num_shots):
+            lq,_ = sample_lost_qubits(num_qubits, p,exclude=target_qubit)
+             
+            lost_set = set(int(c) for c in lq)
+
+            # --- cache lookup: any stored pattern that avoids all lost qubits? ---
+            hit = False
+
+            for supp in cache:
+
+                if lost_set.isdisjoint(supp):
+                    hit = True
+                    break
+
+            if hit:
+                hits += 1
+                success += 1                      # success (a valid pattern survives)
+                continue
         # -------------------------------------------------------------------
 
-        solves += 1
-        res = generalised_spf_logical_heuristic(stabi,  lost_cols, target_qubit=target)
-        if res["success"]:
-            fail += 1
-            # --- cache the found pattern (full-width x, z) ---
+            solves += 1
+            if method=='heuristic':
+                res = generalised_spf_logical_heuristic(stabi,  lq, target_qubit=target)
+            elif method=='ILP':
+                res=generalised_spf_logical(stabi,  lq, target_qubit=target)
+
+            else:
+                raise ValueError(f"Method {method} not recognised")
+
+            if res["success"]:
+                success += 1
+                # --- cache the found pattern (full-width x, z) ---
              
-            supp = pair_support(res["x"], res["z"], numq, target)
-            if supp is not None and supp not in cache:
-                cache.append(supp)
-                if len(cache) > max_cache:
-                    cache.pop(0)         # FIFO eviction
+                supp = ta.pair_support(res["x"], res["z"], numq, target)
+                if supp is not None and supp not in cache:
+                    cache.append(supp)
+                    if len(cache) > max_cache_size:
+                        cache.pop(0)         # FIFO eviction
             # ------------------------------------------------
 
-    fail_list.append(fail/num_shots)
-    fit.append((1-p**4)**4)
+        teleportation_rate.append(success/num_shots)
+    
 
-print(f"cache hits: {hits}, solves: {solves}, hit rate: {hits/(hits+solves):.3f}")
+    print(f"cache hits: {hits}, solves: {solves}, hit rate: {hits/(hits+solves):.3f}")
 
-fail_list = np.asarray(fail_list)
+    return teleportation_rate,cache
+
+"""fail_list = np.asarray(fail_list)
 yerr = np.sqrt(fail_list * (1 - fail_list) / num_shots)
 
 plt.figure()
@@ -184,4 +196,4 @@ plt.title("Threshold plot for crazy graph")
 plt.errorbar(lost_prob, fail_list, yerr=yerr, fmt="o", label="g-SPF")
 plt.plot(lost_prob, fit, label=r"Fit $(1-p^{4})^{4}$")
 plt.legend()
-plt.show()
+plt.show()"""

@@ -8,6 +8,7 @@ from itertools import product
 from ortools.sat.python import cp_model
 
 
+
 def create_graph_code(in_adj : np.array, code_node : int = 0):
     """create a graph code from an input graph
     using the 0th node as the input node"""
@@ -104,29 +105,7 @@ def append_rows_to_tableau(tableau,row):
     return tableau
 
 
-def tableau_list_to_matrix(tableau:list[list]):
-
-    if isinstance(tableau,np.ndarray):
-        return tableau
-
-    length = max(map(len, tableau))
-    tableau=[ti+[None]*(length-len(ti)) for ti in tableau]
-
-    if np.isnan(tableau).any():
-        raise ValueError("Tableau does not contain lists of the same lengths.")
-
-    return np.array(tableau)
-
-def construct_Omega_Matrix(n_qubits):
-
-    Omega=np.zeros((2*n_qubits,2*n_qubits))
-    Omega[n_qubits:,:n_qubits]=np.eye(n_qubits,n_qubits)
-    Omega[:n_qubits,n_qubits:]=np.eye(n_qubits,n_qubits)
-
-    return Omega
-
 def compute_Pauli_weight(v):
-
 
     if isinstance(v,str):
         num_qubits=len(v)
@@ -170,7 +149,7 @@ def rank_F2(M):
 
 
 def find_ker_minus_rowspace(M, CSS: bool = False):
-    M = to_gf2_tableau(M)
+    M = ta.to_gf2_tableau(M)
 
     if not isinstance(M, galois.GF2):
         raise TypeError("M must be binary matrix of type galois.GF(2)")
@@ -179,7 +158,7 @@ def find_ker_minus_rowspace(M, CSS: bool = False):
         ker = M.null_space()
     else:
         num_qubits = M.shape[1] // 2
-        Omega = to_gf2_tableau(construct_Omega_Matrix(num_qubits))
+        Omega = ta.to_gf2_tableau(ta.construct_Omega_Matrix(num_qubits))
         ker = (M @ Omega).null_space()
 
     row_space = M.row_space()
@@ -201,31 +180,9 @@ def find_ker_minus_rowspace(M, CSS: bool = False):
     return ker_minus_rowspace
 
 
- 
-
-def to_gf2_tableau(T):
-
-    if isinstance(T, galois.FieldArray):
-        return T
-
-    if isinstance(T, list):
-        arr = np.asarray(T)
-        # flat list of scalars -> 1-D int array; rectangular list of lists -> 2-D int array;
-        # both wrap into GF2 directly. Only a ragged nested list yields dtype=object,
-        # which needs the padding logic in tableau_list_to_matrix.
-        if arr.dtype == object:
-            arr = tableau_list_to_matrix(T)
-        return GF2(np.asarray(arr).astype(np.int64))
-
-    if isinstance(T, np.ndarray):
-        return GF2(T.astype(np.int64))
-
-    raise TypeError(f"unsupported type for T: {type(T)}")
-
-
 def overlap_with_lost_qubits(T,lost_qubits):
 
-    T=to_gf2_tableau(T)
+    T=ta.to_gf2_tableau(T)
     num_qubits=T.shape[1]//2
     x_touch = T[:, lost_qubits].any(axis=1)               # X part of lost qubits
     z_touch = T[:, np.asarray(lost_qubits) + num_qubits].any(axis=1)    # Z part of lost qubits
@@ -237,7 +194,7 @@ def overlap_with_lost_qubits(T,lost_qubits):
 def reduced_row_echelon_form(T,column_from_where_to_start_RREF): # returns partial reduced echelon form, where the last rows
     #have only ones for the columns in list columns
     #logicals are returned in the same order
-    T=to_gf2_tableau(T)
+    T=ta.to_gf2_tableau(T)
 
     logical_columns=np.arange(column_from_where_to_start_RREF,T.shape[1]) #to list when the logical columns start
 
@@ -343,62 +300,33 @@ def find_anti_commuting_logi_at_O(T,first_logi,accidental_logicals,o): #TODO: cu
         T=append_logical_to_tableau(T,l) #make second logical commute with all accidental logical so we are not in that coset
         
     T_solve,syndrome=make_T_solve_anti_commuting_logi_at_O(T,first_logi,o)
-    T_solve = T_solve@GF2(construct_Omega_Matrix(num_qubits).astype(np.int64))
+    T_solve = T_solve@GF2(ta.construct_Omega_Matrix(num_qubits).astype(np.int64))
     v = solve_gf2(T_solve, syndrome)
     if v is None:
         return None                          # no such logical exists
     return v
 
-def symplectic_basis(logicals, n_qubits):
-    """
-    Given a linear basis of logical operators (each (x|z), length 2n),
-    return a symplectic basis: a list of conjugate pairs [(X0,Z0),(X1,Z1),...]
-    where Xi anticommutes with Zi and commutes with all other basis elements.
-    """
-    Omega = GF2(construct_Omega_Matrix(n_qubits).astype(np.int64))
+def pair_support(x, z, num_qubits, target_qubit):
 
-    def sp(a, b):
-        a = GF2(np.asarray(a).reshape(1, -1).astype(int))
-        b = GF2(np.asarray(b).reshape(-1, 1).astype(int))
-        return int((a @ Omega @ b).ravel()[0])
+    #counts the joint support of x and z 
+    x = np.asarray(x).ravel().astype(int)
+    z = np.asarray(z).ravel().astype(int)
+    supp = set()
 
-    # working list of GF2 row vectors
-    ops = [GF2(np.asarray(l).ravel().astype(int)) for l in logicals]
-    pairs = []
-
-    while ops:
-        a = ops.pop(0)
-        # find a partner in ops that anticommutes with a
-        partner_idx = None
-        for i, b in enumerate(ops):
-            if sp(a, b) == 1:
-                partner_idx = i
-                break
-        if partner_idx is None:
-            # a commutes with everything remaining -> it's dependent / not part of a pair
-            # (shouldn't happen for a proper logical basis; skip it)
+    for q in range(num_qubits):
+        if q == target_qubit:
             continue
-        b = ops.pop(partner_idx)
-
-        # now clear the (a,b) symplectic charge from all remaining ops so they
-        # commute with both a and b
-        new_ops = []
-        for c in ops:
-            # remove component along the (a,b) pair
-            if sp(c, b) == 1:      # c anticommutes with b -> has 'a-like' part
-                c = c + a
-            if sp(c, a) == 1:      # c anticommutes with a -> has 'b-like' part
-                c = c + b
-            new_ops.append(c)
-        ops = new_ops
-        pairs.append((a, b))
-
-    return pairs
+        if x[q] or x[q+num_qubits] or z[q] or z[q+num_qubits]:
+            supp.add(q)
+    if len(supp) == 0:
+        return None          # supported only at O — valid success, not a cacheable pattern
+    return frozenset(supp) 
+ 
 
 def index_array(n:int, lost:list):
     """
-    Build np.concatenate([arange(n), arange(n)]) with every entry whose
-    value appears in `lost` removed from both copies.
+    Build [arange(n), arange(n)] with every entry whose
+    value appears in lost removed from both copies.
 
     """
     base = np.arange(n)
@@ -413,8 +341,7 @@ def remove_lost_qubits_from_tableau(T,lost_qubits:list,row_in_T_where_logical_be
     #they first rows up to row row_in_T_where_logical_begins must be stabilisers. Returns the same order
 
 
-
-    T=to_gf2_tableau(T)
+    T=ta.to_gf2_tableau(T)
 
     num_qubits=T.shape[1]//2
 
@@ -448,7 +375,7 @@ def find_clean_logical(T, logi, lost_qubits,collapse:bool=True):
     T:    (num_gen, 2n) GF2 stabilizer generators
     logi: (2n,) GF2 logical operator
     Returns cleaned logical (2n,) GF2, or None if it can't be cleaned."""
-    T = to_gf2_tableau(T)
+    T = ta.to_gf2_tableau(T)
     logi = GF2(logi) if not isinstance(logi, galois.FieldArray) else logi
 
     n_qubits = T.shape[1] // 2
@@ -504,7 +431,7 @@ def kick_out_qubits(T, qubits):
 
     Returns the same dimensionality as the input.
     """
-    T = to_gf2_tableau(T)
+    T =ta.to_gf2_tableau(T)
 
     if T.ndim not in (1, 2):
         raise ValueError(f"expected 1D or 2D tableau, got ndim={T.ndim}")
@@ -521,17 +448,9 @@ def kick_out_qubits(T, qubits):
 
 def restore_lost_qubits(T_reduced, indices, n_qubits):
     """
-    Inverse of kick_out_qubits: re-embed a reduced tableau into the full
-    2*n_qubits column layout, writing 0 into the X and Z columns of every
-    qubit that is not in `indices`.
-
-    T_reduced : (2m,) or (k, 2m) array, m = len(indices)
-    indices   : surviving qubit labels, as returned by index_array
-    n_qubits  : number of qubits in the original (pre-loss) tableau
-
-    Returns the same dimensionality as the input, with 2*n_qubits columns.
+    Inverse of kick_out_qubits
     """
-    T_reduced = to_gf2_tableau(T_reduced)
+    T_reduced = ta.to_gf2_tableau(T_reduced)
 
     if T_reduced.ndim not in (1, 2):
         raise ValueError(f"expected 1D or 2D tableau, got ndim={T_reduced.ndim}")
@@ -556,16 +475,13 @@ def restore_lost_qubits(T_reduced, indices, n_qubits):
     return T_full
 
 def add_measurements_to_tableau(T,measurements):
-    T=to_gf2_tableau(T)
+    T=ta.to_gf2_tableau(T)
     pass
 
 
-def find_logical_op_basis(tableau_matrix,n_qubits,CSS:bool=False): #idk if this could be super slow
+def find_logical_op_basis(tableau_matrix,n_qubits,CSS:bool=False):  
 
     T = GF2(tableau_matrix)      # numpy array of 0/1
-
-    
-    #TODO: put this in other places?
 
     if CSS: #convention: T=((H_x,0),(0,H_z))
         T_x=T[:n_qubits,:n_qubits]
@@ -591,50 +507,6 @@ def find_logical_op_basis(tableau_matrix,n_qubits,CSS:bool=False): #idk if this 
         return None,None,logicals
 
 
-def turn_tableau_into_TXZY(T): #robust version
-    T = to_gf2_tableau(T)
-
-    if T.ndim == 1:
-        num_qubits = T.shape[0] // 2
-        x_part = T[:num_qubits]
-        z_part = T[num_qubits:]
-        yblock = x_part ^ z_part
-        return to_gf2_tableau(np.concatenate([T, yblock]))
-
-    if T.ndim == 2:
-        num_qubits = T.shape[1] // 2
-        yblock = T[:, :num_qubits] ^ T[:, num_qubits:]
-        return to_gf2_tableau(np.hstack([T, yblock]))
-
-    raise ValueError(f"expected 1D or 2D tableau, got ndim={T.ndim}")
-
-def turn_TXZY_into_tableau(T):
-
-    T=to_gf2_tableau(T)
-
-
-    num_qubits=T.shape[1]//3
-
-    Zblock=T[:,:num_qubits]
-    Xblock=T[:,num_qubits:2*num_qubits]
-
-    T_new=np.hstack((Xblock,Zblock))
-
-
-    return T_new
-
-def turn_TXZYerror_into_tableau(T):
-    T = to_gf2_tableau(T)
-    num_qubits = T.shape[1] // 3
-
-    a = T[:, :num_qubits]                 # pairs with the sx columns -> Z errors
-    b = T[:, num_qubits:2*num_qubits]     # pairs with the sz columns -> X errors
-    c = T[:, 2*num_qubits:]               # Y errors
-
-    Xblock = b + c    #x+x+z, check 3n notation
-    Zblock = a + c
-
-    return np.hstack((Xblock, Zblock))
 
 
 def main():
