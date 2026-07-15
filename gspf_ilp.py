@@ -151,7 +151,8 @@ def generalised_spf_logical(tableau : np.ndarray, xlogical: list,
                     measurements : list[list], lost_qubits : list,
                     g : int,
                     target_qubit = None,
-                    max_time = 60_0):
+                    max_time = 60_0,
+                    minimize_support:bool=False):
     """
     Find a logical satisfying g-SPF algebra of GF2.
 
@@ -330,7 +331,8 @@ def generalised_spf_logical(tableau : np.ndarray, xlogical: list,
     model.Add(anti_sum == 2 * k_total + 1)
 
     # objective function
-    model.Minimize(sum(support))
+    if minimize_support:
+        model.Minimize(sum(support))
 
 
     solver = cp_model.CpSolver()
@@ -444,8 +446,8 @@ def generalised_spf_logical_heuristic(tableau, lost_qubits : list,
         short_second=sc.find_anti_commuting_logi_at_O(T_clean,short_first,target_qubit) #note that this does
         #not need to be short
 
-
-    short_second=dc.find_short_second_logical(T_clean,short_first,max_iter=max_iter)
+    else:
+        short_second=dc.find_short_second_logical(T_clean,short_first,max_iter=max_iter)
 
     if short_second is None:
         return result
