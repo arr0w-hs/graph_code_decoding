@@ -169,44 +169,53 @@ def rank_F2(M):
     return row_space_rank
 
 
-def find_ker_minus_rowspace(M,CSS:bool=False): #M must be GF2 matrix
-
-    M=to_gf2_tableau(M)
+def find_ker_minus_rowspace(M, CSS: bool = False):
+    M = to_gf2_tableau(M)
 
     if not isinstance(M, galois.GF2):
         raise TypeError("M must be binary matrix of type galois.GF(2)")
 
     if CSS:
-        ker=M.null_space()
+        ker = M.null_space()
     else:
-        num_qubits=M.shape[1]//2
-        ker=(M@construct_Omega_Matrix(num_qubits)).null_space()
+        num_qubits = M.shape[1] // 2
+        Omega = to_gf2_tableau(construct_Omega_Matrix(num_qubits))
+        ker = (M @ Omega).null_space()
 
-    row_space=M.row_space()
-    row_space_rank=rank_F2(M)
-    ker_minus_rowspace=[]
+    row_space = M.row_space()
+    row_space_rank = rank_F2(M)
+
+    # grow an independent set on top of the rowspace
+    basis = GF2(np.array(row_space))          # start from the stabiliser rowspace
+    current_rank = row_space_rank
+    ker_minus_rowspace = []
 
     for row in ker:
-        test = GF2(np.vstack([row_space, row.reshape(1, -1)]))
-        rref_test = test.row_reduce()
-        rank = int(np.any(rref_test, axis=1).sum())
-
-        if rank > row_space_rank:
+        stacked = GF2(np.vstack([basis, row.reshape(1, -1)]))
+        new_rank = int(np.any(stacked.row_reduce(), axis=1).sum())
+        if new_rank > current_rank:           # row is independent of rowspace + accepted logicals
             ker_minus_rowspace.append(row)
+            basis = stacked                    # keep it in the accumulator
+            current_rank = new_rank
 
     return ker_minus_rowspace
 
+
+ 
 
 def to_gf2_tableau(T):
 
     if isinstance(T, galois.FieldArray):
         return T
 
-
     if isinstance(T, list):
-        T = tableau_list_to_matrix(T)
-        return GF2(np.asarray(T).astype(np.int64))
-
+        arr = np.asarray(T)
+        # flat list of scalars -> 1-D int array; rectangular list of lists -> 2-D int array;
+        # both wrap into GF2 directly. Only a ragged nested list yields dtype=object,
+        # which needs the padding logic in tableau_list_to_matrix.
+        if arr.dtype == object:
+            arr = tableau_list_to_matrix(T)
+        return GF2(np.asarray(arr).astype(np.int64))
 
     if isinstance(T, np.ndarray):
         return GF2(T.astype(np.int64))
@@ -393,7 +402,7 @@ def find_clean_logical(T, logi, lost_qubits,collapse:bool=True):
 
     n_qubits = T.shape[1] // 2
     lost = np.asarray(lost_qubits)
-    lost_cols = np.concatenate([lost, lost + n_qubits])   # X and Z halves
+    lost_cols = np.concatenate([lost, lost + n_qubits]).astype(int)   # X and Z halves
 
     A = T[:, lost_cols]        # (num_gen, |lost_cols|) — stabilizers on lost qubits
     b = logi[lost_cols]        # (|lost_cols|,)          — logical on lost qubits
@@ -402,7 +411,7 @@ def find_clean_logical(T, logi, lost_qubits,collapse:bool=True):
     c = solve_gf2(A.T, b)
 
     if c is None:
-        print('oh no')
+        
         indices=index_array(n_qubits,[])
         return None,indices          # not correctable: no clean representative exists
 
@@ -410,7 +419,7 @@ def find_clean_logical(T, logi, lost_qubits,collapse:bool=True):
 
     if collapse:
         indices=index_array(n_qubits,lost_qubits)
-        print('indices in find_clean_logica',indices)
+        
         logi_clean=kick_out_qubits(logi_clean,lost_qubits)
     else:
         indices=index_array(n_qubits,[])
