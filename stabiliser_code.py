@@ -4,9 +4,37 @@ from galois import GF2
 import tableau as ta
 import networkx as nx
 from itertools import product
-from decoder_methods import create_graph_code
 
 from ortools.sat.python import cp_model
+
+
+def create_graph_code(in_adj : np.array, code_node : int = 0):
+    """create a graph code from an input graph
+    using the 0th node as the input node"""
+
+    num_nodes = in_adj.shape[0]
+    identity = np.identity(num_nodes, dtype = np.uint16)
+    gen = np.hstack([identity, in_adj])
+    zlogi = gen[code_node].copy()
+    zlogi[code_node] = 0
+    neigh = [i for i, ele in enumerate(in_adj[code_node]) if ele ==1]
+
+    assert(len(neigh)>0)
+    xlogi = gen[neigh[0]].copy()
+
+    for ele in neigh[1:]:
+        gen[ele] ^= gen[neigh[0]]
+
+    rows_to_remove = [code_node, neigh[0]]
+    gen = np.delete(gen, rows_to_remove, axis=0)
+
+    gen = np.delete(gen, [code_node, code_node+num_nodes], axis=1)
+    xlogi = np.delete(xlogi, [code_node, code_node+num_nodes])#, axis=1)
+    zlogi = np.delete(zlogi, [code_node, code_node+num_nodes])#, axis=1)
+
+
+    return xlogi, zlogi, gen
+
 
 def lost_indices_to_mask(lost, n_qubits):
     """

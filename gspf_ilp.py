@@ -243,6 +243,9 @@ def generalised_spf_logical(tableau : np.ndarray,
 
     for meas in measurements:
         assert len(meas) == m, f"measurement must have length {m}"
+    if target_qubit is not None:
+        assert target_qubit < num_qubits, "Target qubit not in the code"
+
     # Model
     model = cp_model.CpModel()
 
@@ -412,7 +415,7 @@ def generalised_spf_logical(tableau : np.ndarray,
     return result
 
 
-def generalised_spf_logical_heuristic(tableau, lost_qubits : list, 
+def generalised_spf_logical_heuristic(tableau, lost_qubits : list,
                     target_qubit:int= None,max_iter:int=100):
     """
     Find a logical satisfying g-SPF algebra of GF2.
@@ -491,7 +494,7 @@ def generalised_spf_logical_heuristic(tableau, lost_qubits : list,
             "x": ta.tableau2paulistring(short_first,indices=indices),
             "z": ta.tableau2paulistring(short_second,indices=indices)
         }
- 
+
     #TODO: output commutation overlap
 
     return result
