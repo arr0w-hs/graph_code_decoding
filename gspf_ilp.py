@@ -207,7 +207,7 @@ def generalised_spf_logical(tableau : np.ndarray,
             raise ValueError("lost_qubits must be list or numpy nd.array")
         else:
             lost_qubits=list(lost_qubits)
-            
+
     #remove lost qubits, keep indices
     num_stab, m = T.shape
     num_qubits = m // 2
@@ -252,6 +252,7 @@ def generalised_spf_logical(tableau : np.ndarray,
 
     for meas in measurements:
         assert len(meas) == m, f"measurement must have length {m}"
+
     if target_qubit is not None:
         assert target_qubit < num_qubits, "Target qubit not in the code"
 
@@ -306,12 +307,25 @@ def generalised_spf_logical(tableau : np.ndarray,
     #support was doubly counted before if qubit is supported in X AND Z logical. So solutions with large overlap
     #were not found
 
+    #removing measuements with support on lost qubits.
+    #Note: This is only algebraically correct for single qubits measurements. Only this way the meas.
+    #are still non-redundant, i.e. a full generating set
 
+    new_meas=[]
+    for m in measurements:
+        m=ta.to_gf2_tableau(m)
+        m= sc.kick_out_qubits(m,lost_qubits)
+        if m.any():
+            new_meas.append(m.ravel())#making meas 1D-array, the shapeshifting is a bit of a mess
+        
+        
     # measurement constraints X
-    for i, meas in enumerate(measurements):
+    for i, meas in enumerate(new_meas):
+       
+     
         meas_x = meas[:num_qubits_remain]
         meas_z = meas[num_qubits_remain:]
-
+         
         raw = sum(
             int(meas_z[q]) * xlogical_x_part[q] + int(meas_x[q]) * xlogical_z_part[q]
             for q in range(num_qubits_remain)
@@ -321,7 +335,7 @@ def generalised_spf_logical(tableau : np.ndarray,
         model.Add(raw == 2 * k_comm)
 
     # measurement constraints Z
-    for i, meas in enumerate(measurements):
+    for i, meas in enumerate(new_meas):
         meas_x = meas[:num_qubits_remain]
         meas_z = meas[num_qubits_remain:]
 
@@ -586,20 +600,25 @@ def generalised_spf_logical_heuristic(tableau, lost_qubits: list,
 if __name__ == "__main__":
     from test_suite import test_gspf
     # print()
-    numq = 10
+    numq = 20
     g = nx.erdos_renyi_graph(numq, 0.7)
     # g = nx.cycle_graph(numq)
     g = nx.to_numpy_array(g, dtype = np.uint16)
 
     xlogi, zlogi, stabi = dc.create_graph_code(g)
 
-    numq -= 1
+    #numq -= 1 #jelena: idk if this number of qubits correspondence is correct?
     gg = 1
+    
+    stabi=ta.to_gf2_tableau(stabi)
+    numq=stabi.shape[1]//2
 
     previous_meas = ["Z1*Z2", "X1*X2"]
+
+    print(previous_meas)
     # previous_meas = ["Z1", "X2"]
     previous_meas = [ta.paulistring2tableau(ele, numq) for ele in previous_meas]
-    # print(previous_meas)
+    
 
     """lost_qubits = np.unique(np.random.randint(0, numq, numq//3))
     # lost_qubits = []
@@ -615,7 +634,7 @@ if __name__ == "__main__":
     T = ta.to_gf2_tableau(stabi)
     numq=T.shape[1]//2
     print('number of qubits')
-    lost_qubits=[2,4]
+    lost_qubits=[8,4,5]
     res =  generalised_spf_logical(T,previous_meas, lost_qubits, gg,target_qubit = 7, minimise_support=False)
     print('lost_qubits',lost_qubits)
     # res = generalised_spf_logical(stabi, xlogi, zlogi, previous_meas, lost_qubits, gg, target_qubit=None)
