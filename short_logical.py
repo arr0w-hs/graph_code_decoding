@@ -4,11 +4,11 @@ from ldpc import BpDecoder, BpOsdDecoder
 from galois import GF2
 import networkx as nx
 import galois
-from gspf_ilp import create_graph_code
+from stabiliser_code import create_graph_code
 from tableau import tableau2paulistring
 
 
-def pass_to_decoder(T,X_logicals,lost_qubits:list,CSS:bool,logical_qubits:list=[0],rounds:int=1,max_iter:int=100): 
+def pass_to_decoder(T,X_logicals,lost_qubits:list,CSS:bool,logical_qubits:list=[0],rounds:int=1,max_iter:int=100):
     #assumes T is already in its reduced form! Full rank!
     # works perfectly for CSS codes
     # TODO: works for non-CSS, but does a different optimisation
@@ -47,7 +47,7 @@ def pass_to_decoder(T,X_logicals,lost_qubits:list,CSS:bool,logical_qubits:list=[
     if destroyed_logicals:
         print('Logical information lost')
         return None
-    
+
     H=sc.kick_out_qubits(H,lost_qubits)
     num_gen =H.shape[0]-(len(X_logicals)-len(destroyed_logicals)) #number of generators has reduced
     syndrome = np.zeros(H.shape[0], dtype=int)

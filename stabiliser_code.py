@@ -295,10 +295,10 @@ def find_anti_commuting_logi_at_O(T,first_logi,accidental_logicals,o): #TODO: cu
 
     num_qubits=T.shape[1]//2
 
- 
+
     for l in accidental_logicals:
         T=append_logical_to_tableau(T,l) #make second logical commute with all accidental logical so we are not in that coset
-        
+
     T_solve,syndrome=make_T_solve_anti_commuting_logi_at_O(T,first_logi,o)
     T_solve = T_solve@GF2(ta.construct_Omega_Matrix(num_qubits).astype(np.int64))
     v = solve_gf2(T_solve, syndrome)
@@ -308,7 +308,7 @@ def find_anti_commuting_logi_at_O(T,first_logi,accidental_logicals,o): #TODO: cu
 
 def pair_support(x, z, num_qubits, target_qubit):
 
-    #counts the joint support of x and z 
+    #counts the joint support of x and z
     x = np.asarray(x).ravel().astype(int)
     z = np.asarray(z).ravel().astype(int)
     supp = set()
@@ -320,8 +320,8 @@ def pair_support(x, z, num_qubits, target_qubit):
             supp.add(q)
     if len(supp) == 0:
         return None          # supported only at O — valid success, not a cacheable pattern
-    return frozenset(supp) 
- 
+    return frozenset(supp)
+
 
 def index_array(n:int, lost:list):
     """
@@ -389,7 +389,7 @@ def find_clean_logical(T, logi, lost_qubits,collapse:bool=True):
     c = solve_gf2(A.T, b)
 
     if c is None:
-        
+
         indices=index_array(n_qubits,[])
         return None,indices          # not correctable: no clean representative exists
 
@@ -397,7 +397,7 @@ def find_clean_logical(T, logi, lost_qubits,collapse:bool=True):
 
     if collapse:
         indices=index_array(n_qubits,lost_qubits)
-        
+
         logi_clean=kick_out_qubits(logi_clean,lost_qubits)
     else:
         indices=index_array(n_qubits,[])
@@ -479,7 +479,7 @@ def add_measurements_to_tableau(T,measurements):
     pass
 
 
-def find_logical_op_basis(tableau_matrix,n_qubits,CSS:bool=False):  
+def find_logical_op_basis(tableau_matrix,n_qubits,CSS:bool=False):
 
     T = GF2(tableau_matrix)      # numpy array of 0/1
 
@@ -508,8 +508,7 @@ def find_logical_op_basis(tableau_matrix,n_qubits,CSS:bool=False):
 
 
 
-
-def main():
+if __name__ == "__main__":
 
 
     nodes=15
@@ -525,7 +524,7 @@ def main():
     #for i in range(stabi.shape[0]):
         #print(tableau2paulistring(stabi[i,:]))
 
-    T=tableau_list_to_matrix(stabi)
+    T=ta.tableau_list_to_matrix(stabi)
     numq=T.shape[1]//2
     print('number of qubits: ',numq)
     #X_logicals,Z_logicals,logicals=find_logical_op_basis(T,n_qubits)
@@ -538,7 +537,3 @@ def main():
     if zlogi_new is not None:
         print('zlogi_new ',ta.tableau2paulistring(restore_lost_qubits(zlogi_new,n_qubits=numq,indices=indices)))
     print('z indices',z_indices)
-
-if __name__ == "__main__":
-
-    main()

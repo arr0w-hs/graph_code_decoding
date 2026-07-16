@@ -146,13 +146,13 @@ def find_gspf_one_logical(tableau : list[list], logical: list,
         return status
 
 
-def generalised_spf_logical(tableau : np.ndarray, 
+def generalised_spf_logical(tableau : np.ndarray,
                     measurements : list[list], lost_qubits : list,
                     g : int,
                     target_qubit:int = None,
                     return_reduced_form:bool=False,
-                    max_time:float = 60_0,
-                    minimize_support:bool=False):
+                    max_time:float = 600,
+                    minimise_support:bool=True):
     """
     Find a logical satisfying g-SPF algebra of GF2.
 
@@ -177,7 +177,12 @@ def generalised_spf_logical(tableau : np.ndarray,
         The required output qubit. Currently only of length 1, could be made a list.
 
     max_time : int
-    The maximum amount of time in seconds the Solver runs for
+        The maximum amount of time in seconds the Solver runs for
+
+    minimise_support : bool
+        Default is True, where we minimise the support of X and Z logicals.
+        Can be set to False so that we only find any two logicals that
+        satify the constraints.
 
     Returns
     -------
@@ -195,20 +200,18 @@ def generalised_spf_logical(tableau : np.ndarray,
             "bx":None,
             "bz": None,
         }
-    T = sc.to_gf2_tableau(tableau) #this also catches if T is a string
+    T = ta.to_gf2_tableau(tableau) #this also catches if T is a string
 
     #remove lost qubits, keep indices
     num_stab, m = T.shape
     num_qubits = m // 2
     _,_,logicals=sc.find_logical_op_basis(T,num_qubits)
-    xlogi=sc.to_gf2_tableau(logicals[0])
-    zlogi=sc.to_gf2_tableau(logicals[1]) #arbitrary designation
+    xlogi=ta.to_gf2_tableau(logicals[0])
+    zlogi=ta.to_gf2_tableau(logicals[1]) #arbitrary designation
 
     assert m % 2 == 0, "Tableau length must be even"
     assert all(0 <= x <= num_qubits-1 for x in lost_qubits), f"Lost qubits can only contain qubits indices from 0 to {num_qubits-1}"
     assert g >= 1, "g must be at least 1"
-
-
     assert len(logicals)==2, f"There must only be one logical qubits, here there are {len(logicals)//2}."
 
     xlogi,x_indices=sc.find_clean_logical(T,xlogi,lost_qubits) #this already removes the lost qubits entirely
@@ -216,15 +219,15 @@ def generalised_spf_logical(tableau : np.ndarray,
 
     if xlogi is None or zlogi is None: #no clean logi exists, information destroyed
         return result
-    
+
     T,_,indices=sc.remove_lost_qubits_from_tableau(T,lost_qubits) #indices to remember which qubits removed
 
     assert np.array_equal(x_indices, indices) and np.array_equal(z_indices, indices), "clean/reduce index mismatch"
     num_stab_remain, m_remain = T.shape
     num_qubits_remain = m_remain // 2
 
-    xlogi = sc.to_gf2_tableau(np.asarray(xlogi).ravel())
-    zlogi = sc.to_gf2_tableau(np.asarray(zlogi).ravel())
+    xlogi = ta.to_gf2_tableau(np.asarray(xlogi).ravel())
+    zlogi = ta.to_gf2_tableau(np.asarray(zlogi).ravel())
     assert xlogi.shape == (m_remain,), f"xlogi width {xlogi.shape} != ({m_remain},)"
     assert zlogi.shape == (m_remain,), f"zlogi width {zlogi.shape} != ({m_remain},)"
 
@@ -234,11 +237,11 @@ def generalised_spf_logical(tableau : np.ndarray,
 
     if target_qubit is not None:
         assert target_qubit < num_qubits, f"Target qubit must be in range 0 - {num_qubits-1}"
-           
+
         if target_qubit not in indices: #target qubit lost
             return result
-        
-        else: 
+
+        else:
             target_reduced = int(np.where(indices == target_qubit)[0][0])
 
     for meas in measurements:
@@ -278,13 +281,13 @@ def generalised_spf_logical(tableau : np.ndarray,
         model.Add(mod2_expr <= 1)
         zmod2_terms.append(mod2_expr)
 
-    
+
     xlogical_x_part = xmod2_terms[:num_qubits_remain]
     xlogical_z_part = xmod2_terms[num_qubits_remain:]
     zlogical_x_part=zmod2_terms[:num_qubits_remain]
     zlogical_z_part=zmod2_terms[num_qubits_remain:]
-    
-    if minimize_support:
+
+    if minimise_support:
         support = []
         for q in range(num_qubits_remain):
             sq = model.NewBoolVar(f"support_{q}")
@@ -294,7 +297,7 @@ def generalised_spf_logical(tableau : np.ndarray,
             model.Add(sq <= sum(parts))     # all parts 0 -> sq = 0
             support.append(sq)
 
-    #support was doubly counted before if qubit is supported in X AND Z logical. So solutions with large overlap 
+    #support was doubly counted before if qubit is supported in X AND Z logical. So solutions with large overlap
     #were not found
 
 
@@ -346,8 +349,8 @@ def generalised_spf_logical(tableau : np.ndarray,
         anti_q = model.NewIntVar(0, 1, f"anti_{q}")
         k_anti = model.NewIntVar(0, 1, f"k_anti_{q}")
 
+        # target qubit constraints
         if target_qubit is not None and q==target_reduced:
-           
             model.Add(anti_q == 1)
 
         model.Add(anti_q == anti_comm - 2 * k_anti)
@@ -361,7 +364,7 @@ def generalised_spf_logical(tableau : np.ndarray,
     model.Add(anti_sum == 2 * k_total + 1)
 
     # objective function #jelena: support does not need to be minimized if one only wants to find a pair for threshold
-    if minimize_support:
+    if minimise_support:
         model.Minimize(sum(support))
 
     solver = cp_model.CpSolver()
@@ -374,8 +377,8 @@ def generalised_spf_logical(tableau : np.ndarray,
     if status in (cp_model.OPTIMAL, cp_model.FEASIBLE):
         x = [solver.Value(v) for v in xmod2_terms]
         z = [solver.Value(v) for v in zmod2_terms]
-        x=sc.to_gf2_tableau(x)
-        z=sc.to_gf2_tableau(z)
+        x=ta.to_gf2_tableau(x)
+        z=ta.to_gf2_tableau(z)
 
         if not return_reduced_form:
             x=sc.restore_lost_qubits(x,x_indices,num_qubits)
@@ -385,15 +388,15 @@ def generalised_spf_logical(tableau : np.ndarray,
             "success": True,
             "status": status,
             "status_name": status_name,
-            "objective": solver.ObjectiveValue() if minimize_support else None,
+            "objective": solver.ObjectiveValue() if minimise_support else None,
             "x": x,
             "z": z,
-            "support_size": [solver.Value(v) for v in support] if minimize_support else None,
+            "support_size": [solver.Value(v) for v in support] if minimise_support else None,
             "bx": np.array([solver.Value(bx[i]) for i in range(num_stab_remain)], dtype=int),
             "bz": np.array([solver.Value(bz[i]) for i in range(num_stab_remain)], dtype=int),
         }
 
-     
+
 
     else:
         result = {
@@ -430,7 +433,7 @@ def generalised_spf_logical_heuristic(tableau, lost_qubits: list,
         "bz": None,
     }
 
-    T = sc.to_gf2_tableau(tableau)
+    T = ta.to_gf2_tableau(tableau)
     _, m = T.shape
     num_qubits = m // 2
 
@@ -438,7 +441,7 @@ def generalised_spf_logical_heuristic(tableau, lost_qubits: list,
 
     assert all(0 <= x <= num_qubits - 1 for x in lost_qubits), \
         f"Lost qubits must be indices in 0..{num_qubits-1}"
-    
+
     if target_qubit is not None:
         assert target_qubit < num_qubits, \
             f"Target qubit must be in range 0..{num_qubits-1}"
@@ -447,17 +450,17 @@ def generalised_spf_logical_heuristic(tableau, lost_qubits: list,
 
     assert len(logical_ops) == 2, \
         f"Expected one logical qubit, got {len(logical_ops)//2}"
-    
-    logical_repr_commute = sc.to_gf2_tableau(logical_ops[0]) 
-    logical_repr_anticommute=sc.to_gf2_tableau(logical_ops[1])
+
+    logical_repr_commute = ta.to_gf2_tableau(logical_ops[0])
+    logical_repr_anticommute=ta.to_gf2_tableau(logical_ops[1])
 
     logi_commute_clean, logi_indices = sc.find_clean_logical(T, logical_repr_commute, lost_qubits)
     logi_anticommute_clean,logi_indices=sc.find_clean_logical(T, logical_repr_anticommute, lost_qubits)
-   
+
 
     if logi_commute_clean is None or logi_anticommute_clean is None: #logical information destroyed
         return result
-    
+
 
     T_clean, _, indices = sc.remove_lost_qubits_from_tableau(T, lost_qubits) #indices tells us which
     #indices of T_clean (which is a reduced tableau) corresponds to tthe old indices of T
@@ -478,19 +481,19 @@ def generalised_spf_logical_heuristic(tableau, lost_qubits: list,
     #in order for the decoder to work this basis must be a symplectic basis
 
     num_logical_qubits_remain=len(reduced_logicals)//2
-     
+
     Omega = ta.to_gf2_tableau(ta.construct_Omega_Matrix(num_qubits_remain))
 
 
     X_logical_qubit = ta.to_gf2_tableau(logi_commute_clean).ravel()
-    Z_logical_qubit = ta.to_gf2_tableau(logi_anticommute_clean).ravel() 
+    Z_logical_qubit = ta.to_gf2_tableau(logi_anticommute_clean).ravel()
 
     if num_logical_qubits_remain>1:
         additional_logicals = []
         #making the additional logicals commute with X and Z
         for lg in reduced_logicals:
 
-            c = ta.to_gf2_tableau(lg).ravel() 
+            c = ta.to_gf2_tableau(lg).ravel()
 
             if ta.sp(c, Z_logical_qubit) == 1:
                 c = c + X_logical_qubit
@@ -505,8 +508,8 @@ def generalised_spf_logical_heuristic(tableau, lost_qubits: list,
 
     additional_logicals=[]
     for (Xa, Za) in additional_logical_pairs:
-        additional_logicals.append(sc.to_gf2_tableau(Xa).ravel())
-        additional_logicals.append(sc.to_gf2_tableau(Za).ravel())
+        additional_logicals.append(ta.to_gf2_tableau(Xa).ravel())
+        additional_logicals.append(ta.to_gf2_tableau(Za).ravel())
 
     #-------------------------------------------------------------------------------------------------------#
     #find short logical that commutes with logi_commute and anti-commutes with logi_anti_commute_clean
@@ -515,10 +518,10 @@ def generalised_spf_logical_heuristic(tableau, lost_qubits: list,
     short_first, channel_probs = dc.find_first_short_logical_in_coset(
         T_clean, logi_anticommute=logi_anticommute_clean, logi_commute=logi_commute_clean,
         accidental_logicals=additional_logicals, o=target_reduced, max_iter=max_iter)
-    
+
     if short_first is None: #decoder failed
         return result
- 
+
 
     """The loop does the following: It tries to find an anti-commuting second logical with anti-commutation at O.
     That is a pure linear algebra method. Additional logicals is passed so that the anti-commuting logical is not
@@ -550,8 +553,8 @@ def generalised_spf_logical_heuristic(tableau, lost_qubits: list,
         return result
 
 
-    short_first = sc.to_gf2_tableau(short_first).ravel()
-    short_second = sc.to_gf2_tableau(short_second).ravel()
+    short_first = ta.to_gf2_tableau(short_first).ravel()
+    short_second = ta.to_gf2_tableau(short_second).ravel()
 
 
     if not return_reduced_form:
@@ -574,8 +577,9 @@ def generalised_spf_logical_heuristic(tableau, lost_qubits: list,
 
 
 if __name__ == "__main__":
-
-    """numq = 10
+    from test_suite import test_gspf
+    # print()
+    numq = 10
     g = nx.erdos_renyi_graph(numq, 0.7)
     # g = nx.cycle_graph(numq)
     g = nx.to_numpy_array(g, dtype = np.uint16)
@@ -590,18 +594,22 @@ if __name__ == "__main__":
     previous_meas = [ta.paulistring2tableau(ele, numq) for ele in previous_meas]
     # print(previous_meas)
 
-    lost_qubits = np.unique(np.random.randint(0, numq, numq//4))
+    lost_qubits = np.unique(np.random.randint(0, numq, numq//3))
     # lost_qubits = []
     s = str()
     for ele in lost_qubits:
         s += "Y"+str(ele)+"*"
     s = s[:-1]
-    
+    print("lost_qubits: ", lost_qubits, s)
     # lost_qubits = ta.paulistring2tableau("Y0", numq)
     lost_qubits = ta.paulistring2tableau(s, numq)
 
 
     T = GF2(stabi)
-    generalised_spf_logical(stabi, xlogi, zlogi, previous_meas, lost_qubits, gg, target_qubit=None)"""
-
-   
+    res =  generalised_spf_logical(T, previous_meas, lost_qubits, gg,target_qubit = 7)
+    # res = generalised_spf_logical(stabi, xlogi, zlogi, previous_meas, lost_qubits, gg, target_qubit=None)
+    # print(res)
+    xlo = res["x"]
+    zlo = res["z"]
+    print("xlogical output from gspf", ta.tableau2paulistring(xlo))
+    print("zlogical output from gspf", ta.tableau2paulistring(zlo))

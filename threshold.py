@@ -44,71 +44,6 @@ def run_p(args):
     return success / num_shots
 
 
-plt.figure()
-
-
-lost_prob = np.linspace(0,1,21)
-for i in [2, 3, 4, 5]:
-    # cha = "hexagonal"
-    cha = "crazy graph"
-    # g = hexagonal_lattice(i,i)
-    g = crazy_graph(i,i)
-    g = nx.to_numpy_array(g, dtype = np.uint16)
-    #numq = g.shape[0]-1
-    xlogi, zlogi, stabi = create_graph_code(g)
-    T = GF2(stabi)
-    numq=T.shape[1]//2
-    gg = 1
-    previous_meas = []
-    previous_meas = [ta.paulistring2tableau(ele, numq) for ele in previous_meas]
-
-
-    fail_list = []
-    fit = []
-    num_shots = 2000
-    args = [
-        (p, g, stabi, xlogi, zlogi,
-            previous_meas, numq, gg, num_shots)
-        for p in lost_prob
-    ]
-
-    fail_list = Parallel(n_jobs=-1)(
-        delayed(run_p)(arg) for arg in args
-    ) #can we make them communicate somehow?
-
-    fail_list = np.asarray(fail_list)
-    yerr = np.sqrt(fail_list * (1 - fail_list) / num_shots)
-
-    plt.title(f"Threshold plot for {cha} channel")
-    plt.errorbar(
-        lost_prob,
-        fail_list,
-        yerr=yerr,
-        fmt="o-",
-        label=f"Channel is {i}x{i}"
-    )
-
-    plt.xlabel("Loss Rate")
-    plt.ylabel("Rate of teleportation")
-
-plt.legend()
-plt.grid()
-# plt.savefig(f"{cha}_threshold_5"+".pdf", dpi=800, format="pdf", bbox_inches = 'tight')
-plt.show()
-
-
-g = crazy_graph(4,4)
-g = nx.to_numpy_array(g, dtype = np.uint16)
-xlogi, zlogi, stabi = create_graph_code(g)
-T = GF2(stabi)
-numq = T.shape[1]//2
-gg = 1
-previous_meas = []
-previous_meas = [ta.paulistring2tableau(ele, numq) for ele in previous_meas]
-
-target = numq - 1          # output qubit O in tableau columns
-
-
 
 def sample_lost_qubits(num_qubits, p, exclude=None, rng=None):
 
@@ -124,14 +59,15 @@ def sample_lost_qubits(num_qubits, p, exclude=None, rng=None):
 
     return lost_qubits, lost_mask
 
+
 def compute_teleportation_rate(T,p:float,\
-                      target_qubit:int=None,max_cache_size:int=None,method:str='heuristic',num_shots:int=500):
-    cache = []                  
-    
+                      target_qubit:int=None,max_cache_size:int=None,method:str='heuristic',num_shots:int=2000):
+    cache = []
+
     num_qubits=T.shape[1]//2
- 
+
     teleportation_rate = []
-   
+
     hits = 0
     solves = 0
 
@@ -139,7 +75,7 @@ def compute_teleportation_rate(T,p:float,\
 
     for ele in range(num_shots):
         lq,_ = sample_lost_qubits(num_qubits, p,exclude=target_qubit)
-             
+
         lost_set = set(int(c) for c in lq)
 
         # --- cache lookup: any stored pattern that avoids all lost qubits? ---
@@ -169,7 +105,7 @@ def compute_teleportation_rate(T,p:float,\
         if res["success"]:
             success += 1
             # --- cache the found pattern (full-width x, z) ---
-             
+
             supp = ta.pair_support(res["x"], res["z"], numq, target)
             if supp is not None and supp not in cache:
                 cache.append(supp)
@@ -183,12 +119,78 @@ def compute_teleportation_rate(T,p:float,\
 
     return teleportation_rate,cache
 
-"""fail_list = np.asarray(fail_list)
-yerr = np.sqrt(fail_list * (1 - fail_list) / num_shots)
 
-plt.figure()
-plt.title("Threshold plot for crazy graph")
-plt.errorbar(lost_prob, fail_list, yerr=yerr, fmt="o", label="g-SPF")
-plt.plot(lost_prob, fit, label=r"Fit $(1-p^{4})^{4}$")
-plt.legend()
-plt.show()"""
+if __name__ == "__main__":
+    plt.figure()
+
+
+    lost_prob = np.linspace(0,1,21)
+    for i in [2, 3, 4, 5]:
+        # cha = "hexagonal"
+        cha = "crazy graph"
+        # g = hexagonal_lattice(i,i)
+        g = crazy_graph(i,i)
+        g = nx.to_numpy_array(g, dtype = np.uint16)
+        #numq = g.shape[0]-1
+        xlogi, zlogi, stabi = create_graph_code(g)
+        T = GF2(stabi)
+        numq=T.shape[1]//2
+        gg = 1
+        previous_meas = []
+        previous_meas = [ta.paulistring2tableau(ele, numq) for ele in previous_meas]
+
+
+        fail_list = []
+        fit = []
+        num_shots = 2000
+        args = [
+            (p, g, stabi, xlogi, zlogi,
+                previous_meas, numq, gg, num_shots)
+            for p in lost_prob
+        ]
+
+        fail_list = Parallel(n_jobs=-1)(
+            delayed(run_p)(arg) for arg in args
+        ) #can we make them communicate somehow?
+
+        fail_list = np.asarray(fail_list)
+        yerr = np.sqrt(fail_list * (1 - fail_list) / num_shots)
+
+        plt.title(f"Threshold plot for {cha} channel")
+        plt.errorbar(
+            lost_prob,
+            fail_list,
+            yerr=yerr,
+            fmt="o-",
+            label=f"Channel is {i}x{i}"
+        )
+
+        plt.xlabel("Loss Rate")
+        plt.ylabel("Rate of teleportation")
+
+    plt.legend()
+    plt.grid()
+    # plt.savefig(f"{cha}_threshold_5"+".pdf", dpi=800, format="pdf", bbox_inches = 'tight')
+    plt.show()
+
+
+    g = crazy_graph(4,4)
+    g = nx.to_numpy_array(g, dtype = np.uint16)
+    xlogi, zlogi, stabi = create_graph_code(g)
+    T = GF2(stabi)
+    numq = T.shape[1]//2
+    gg = 1
+    previous_meas = []
+    previous_meas = [ta.paulistring2tableau(ele, numq) for ele in previous_meas]
+
+    target = numq - 1          # output qubit O in tableau columns
+
+    fail_list = np.asarray(fail_list)
+    yerr = np.sqrt(fail_list * (1 - fail_list) / num_shots)
+
+    plt.figure()
+    plt.title("Threshold plot for crazy graph")
+    plt.errorbar(lost_prob, fail_list, yerr=yerr, fmt="o", label="g-SPF")
+    plt.plot(lost_prob, fit, label=r"Fit $(1-p^{4})^{4}$")
+    plt.legend()
+    plt.show()
