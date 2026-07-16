@@ -202,6 +202,12 @@ def generalised_spf_logical(tableau : np.ndarray,
         }
     T = ta.to_gf2_tableau(tableau) #this also catches if T is a string
 
+    if not isinstance(lost_qubits,list):
+        if not isinstance(lost_qubits,np.ndarray):
+            raise ValueError("lost_qubits must be list or numpy nd.array")
+        else:
+            lost_qubits=list(lost_qubits)
+            
     #remove lost qubits, keep indices
     num_stab, m = T.shape
     num_qubits = m // 2
@@ -375,6 +381,7 @@ def generalised_spf_logical(tableau : np.ndarray,
     # print("Status:", solver.StatusName(status))
     status_name = solver.StatusName(status)
     if status in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+        print('solved')
         x = [solver.Value(v) for v in xmod2_terms]
         z = [solver.Value(v) for v in zmod2_terms]
         x=ta.to_gf2_tableau(x)
@@ -404,8 +411,8 @@ def generalised_spf_logical(tableau : np.ndarray,
             "status": status,
             "status_name": status_name,
             "objective": None,
-            "x": xlogi,
-            "z": zlogi,
+            "x": None, #giving back None for failure
+            "z": None,
             "support_size": None,
             "bx": None,
             "bz": None,
@@ -594,21 +601,26 @@ if __name__ == "__main__":
     previous_meas = [ta.paulistring2tableau(ele, numq) for ele in previous_meas]
     # print(previous_meas)
 
-    lost_qubits = np.unique(np.random.randint(0, numq, numq//3))
+    """lost_qubits = np.unique(np.random.randint(0, numq, numq//3))
     # lost_qubits = []
     s = str()
     for ele in lost_qubits:
         s += "Y"+str(ele)+"*"
     s = s[:-1]
-    print("lost_qubits: ", lost_qubits, s)
+    print("lost_qubits: ", lost_qubits, s)"""
     # lost_qubits = ta.paulistring2tableau("Y0", numq)
-    lost_qubits = ta.paulistring2tableau(s, numq)
+    #lost_qubits = ta.paulistring2tableau(s, numq)
 
 
-    T = GF2(stabi)
-    res =  generalised_spf_logical(T, previous_meas, lost_qubits, gg,target_qubit = 7)
+    T = ta.to_gf2_tableau(stabi)
+    numq=T.shape[1]//2
+    print('number of qubits')
+    lost_qubits=[2,4]
+    res =  generalised_spf_logical(T,previous_meas, lost_qubits, gg,target_qubit = 7, minimise_support=False)
+    print('lost_qubits',lost_qubits)
     # res = generalised_spf_logical(stabi, xlogi, zlogi, previous_meas, lost_qubits, gg, target_qubit=None)
     # print(res)
+    print("success: ",res['success'])
     xlo = res["x"]
     zlo = res["z"]
     print("xlogical output from gspf", ta.tableau2paulistring(xlo))

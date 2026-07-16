@@ -340,7 +340,12 @@ def remove_lost_qubits_from_tableau(T,lost_qubits:list,row_in_T_where_logical_be
     #can also remove lost qubits from tableau when the tableau includes the logical operators of the code
     #they first rows up to row row_in_T_where_logical_begins must be stabilisers. Returns the same order
 
-
+    if not isinstance(lost_qubits,list):
+        if not isinstance(lost_qubits,np.ndarray):
+            raise ValueError("lost_qubits must be list or numpy nd.array")
+        else:
+            lost_qubits=list(lost_qubits)
+            
     T=ta.to_gf2_tableau(T)
 
     num_qubits=T.shape[1]//2
