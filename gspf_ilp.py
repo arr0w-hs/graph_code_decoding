@@ -874,7 +874,7 @@ if __name__ == "__main__":
     numq=T.shape[1]//2
 
     # lost_qubits=[8,4,5]
-    res =  generalised_spf_logical(T,previous_meas, lost_qubits, gg,target_qubit = 7, minimise_support=True)
+    res =  generalised_spf_logical(T,previous_meas, lost_qubits, gg,target_qubit = 7, minimise_support=False)
     print('lost_qubits',lost_qubits)
     # res = generalised_spf_logical(stabi, xlogi, zlogi, previous_meas, lost_qubits, gg, target_qubit=None)
     # print(res)
