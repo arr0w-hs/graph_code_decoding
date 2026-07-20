@@ -634,7 +634,7 @@ def generalised_spf_logical(tableau : np.ndarray,
     # print("Status:", solver.StatusName(status))
     status_name = solver.StatusName(status)
     if status in (cp_model.OPTIMAL, cp_model.FEASIBLE):
-        print('solved')
+        # print('solved')
         x = [solver.Value(v) for v in xmod2_terms]
         z = [solver.Value(v) for v in zmod2_terms]
         x=ta.to_gf2_tableau(x)
@@ -762,7 +762,7 @@ def generalised_spf_logical_heuristic(tableau, lost_qubits: list,
                 #equal to X_logical_qubit or Z_logical_qubit
                 additional_logicals.append(c)
 
-    additional_logical_pairs = sc.symplectic_basis(additional_logicals, num_qubits_remain)
+    additional_logical_pairs = ta.symplectic_basis(additional_logicals, num_qubits_remain)
 
     additional_logicals=[]
     for (Xa, Za) in additional_logical_pairs:
@@ -837,7 +837,7 @@ def generalised_spf_logical_heuristic(tableau, lost_qubits: list,
 if __name__ == "__main__":
     from test_suite import test_gspf
     # print()
-    numq = 10
+    numq = 17
     g = nx.erdos_renyi_graph(numq, 0.57)
     # g = nx.cycle_graph(numq)
     g = nx.to_numpy_array(g, dtype = np.uint16)
@@ -859,44 +859,56 @@ if __name__ == "__main__":
     previous_meas = [ta.paulistring2tableau(ele, numq) for ele in previous_meas]
 
 
-    lost_qubits = np.unique(np.random.randint(0, numq, numq//4))
-    # lost_qubits = []
+    lq = np.unique(np.random.randint(0, numq, numq//4))
+    # lq = []
     s = str()
-    for ele in lost_qubits:
+    for ele in lq:
         s += "Y"+str(ele)+"*"
     s = s[:-1]
-    print("lost_qubits: ", lost_qubits, s)
-    # lost_qubits = ta.paulistring2tableau("Y0", numq)
-    #lost_qubits = ta.paulistring2tableau(s, numq)
+    print("lq: ", lq)
+    # lq = ta.paulistring2tableau("Y0", numq)
+    #lq = ta.paulistring2tableau(s, numq)
 
 
     T = ta.to_gf2_tableau(stabi)
     numq=T.shape[1]//2
 
-    # lost_qubits=[8,4,5]
-    res =  generalised_spf_logical(T,previous_meas, lost_qubits, gg,target_qubit = 7, minimise_support=True)
-    print('lost_qubits',lost_qubits)
-    # res = generalised_spf_logical(stabi, xlogi, zlogi, previous_meas, lost_qubits, gg, target_qubit=None)
-    # print(res)
-    # print("success: ",res['success'])
+    # lq=[8,4,5]
+    # res =  generalised_spf_logical(T,previous_meas, lq, gg,target_qubit = 7, minimise_support=True)
+    # print('lq',lq)
+    # # res = generalised_spf_logical(stabi, xlogi, zlogi, previous_meas, lq, gg, target_qubit=None)
+    # # print(res)
+    # # print("success: ",res['success'])
+    # if res['success']:
+    #     xlo = res["x"]
+    #     zlo = res["z"]
+    #     print("xlogical output from gspf", ta.tableau2paulistring(xlo))
+    #     print("zlogical output from gspf", ta.tableau2paulistring(zlo))
+
+    #     test_gspf(T, xlo, zlo, previous_meas, lq, g =gg)
+
+    # print("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
+    # res =  generalised_spf_logical_old(T,xlogi, zlogi, previous_meas, lq, gg,target_qubit = 7, minimise_support=True)
+    # # print('lq',lq)
+    # # res = generalised_spf_logical(stabi, xlogi, zlogi, previous_meas, lq, gg, target_qubit=None)
+    # # print(res)
+    # # print("success: ",res['success'])
+    # if res['success']:
+    #     xlo = res["x"]
+    #     zlo = res["z"]
+    #     print("xlogical output from gspf", ta.tableau2paulistring(xlo))
+    #     print("zlogical output from gspf", ta.tableau2paulistring(zlo))
+
+    #     test_gspf(T, xlo, zlo, previous_meas, lq, g =gg)
+
+
+
+    res = generalised_spf_logical_heuristic(T, lq, target_qubit=7)
     if res['success']:
+
         xlo = res["x"]
         zlo = res["z"]
-        print("xlogical output from gspf", ta.tableau2paulistring(xlogi))
-        print("zlogical output from gspf", ta.tableau2paulistring(zlogi))
+        print("xlogical output from gspf", ta.tableau2paulistring(xlo))
+        print("zlogical output from gspf", ta.tableau2paulistring(zlo))
 
-        test_gspf(T, xlo, zlo, previous_meas, lost_qubits, g =gg)
-
-    print("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
-    res =  generalised_spf_logical_old(T,xlogi, zlogi, previous_meas, lost_qubits, gg,target_qubit = 7, minimise_support=True)
-    print('lost_qubits',lost_qubits)
-    # res = generalised_spf_logical(stabi, xlogi, zlogi, previous_meas, lost_qubits, gg, target_qubit=None)
-    # print(res)
-    # print("success: ",res['success'])
-    if res['success']:
-        xlo = res["x"]
-        zlo = res["z"]
-        print("xlogical output from gspf", ta.tableau2paulistring(xlogi))
-        print("zlogical output from gspf", ta.tableau2paulistring(zlogi))
-
-        test_gspf(T, xlo, zlo, previous_meas, lost_qubits, g =gg)
+        test_gspf(T, xlo, zlo, previous_meas, lq, g =gg)

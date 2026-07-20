@@ -103,17 +103,17 @@ if __name__ == "__main__":
   from galois import GF2
 
   # Example: [[34,4,10]] over GF(3^2), so q=9 and p=3
-  html = fetch_codetables_qecc(n=16, k=1, q=4)
+  html = fetch_codetables_qecc(n=9, k=1)
 
-  Hx, Hz, H = extract_stabilizer_matrix(html, n=16, q=4)
+  Hx, Hz, H = extract_stabilizer_matrix(html, n=9)
 
   print("Hx shape:", Hx.shape)
   print("Hz shape:", Hz.shape)
   print("H shape :", H.shape)
-  print("commutes:", check_stabilizer_commutes(Hx, Hz, q=4))
+  print("commutes:", check_stabilizer_commutes(Hx, Hz))
 
   print(H)
   H = GF2(H)
 
-  a = find_logical_op_basis(H, 16)
+  a = find_logical_op_basis(H, 9)
   print(a)
