@@ -162,11 +162,8 @@ def sp(a, b): #computes the symplectic product between a and b
 
     assert len(b)//2==num_qubits,'a and b shape inconsistent'
  
-    Omega=construct_Omega_Matrix(num_qubits)
+    Omega=to_gf2_tableau(construct_Omega_Matrix(num_qubits))
 
-    sympl_product=(a @ Omega @ b)
-
-    print('shape of symplectic product',sympl_product)
     return int(a @ Omega @ b)
 
 def turn_tableau_into_TXZY(T): #robust version
@@ -354,21 +351,28 @@ def find_req_measurements(stab_list, zlogi_list):
 
     return list(set(stab_list))
 
-
-def symplectic_basis(logicals, n_qubits):
+def symplectic_basis(logicals):
     """
     Given a linear basis of logical operators (each (x|z), length 2n),
     return a symplectic basis: a list of conjugate pairs [(X0,Z0),(X1,Z1),...]
     where Xi anticommutes with Zi and commutes with all other basis elements.
+
+    Vectors with no anticommuting partner in the span (the symplectic radical)
+    are discarded rather than raising. This handles a linear basis of a
+    possibly-degenerate space, e.g. the logical space of a code after
+    lost-qubit removal.
     """
-    Omega = to_gf2_tableau(construct_Omega_Matrix(n_qubits))
 
     # working list of GF2 row vectors
-    ops = [to_gf2_tableau(l).ravel() for l in logicals]
-    xz_pairs_per_logical = [] #pairs of X,Z logical operators per qubit
+    if isinstance(logicals, list):
+        ops = [to_gf2_tableau(l).ravel() for l in logicals]
+    elif isinstance(logicals, np.ndarray):
+        ops = [to_gf2_tableau(logicals[i, :]).ravel() for i in range(logicals.shape[0])]
+
+    xz_pairs_per_logical = []  # pairs of X,Z logical operators per qubit
 
     while ops:
-        a = ops.pop(0) # find a partner in ops that anticommutes with a, remove and return element 0
+        a = ops.pop(0)  # take the next operator, find a partner that anticommutes with it
         partner_idx = None
         for i, b in enumerate(ops):
             if sp(a, b) == 1:
@@ -376,17 +380,18 @@ def symplectic_basis(logicals, n_qubits):
                 break
 
         if partner_idx is None:
-            raise ValueError('Logicals are not independent. One commutes with all of them.')
-        
+            # a lies in the radical: it commutes with everything remaining.
+            # It is not a logical degree of freedom — discard and continue.
+            continue
+
         b = ops.pop(partner_idx)
 
         new_ops = []
-        #make all other operators commute with a and b
+        # make all other operators commute with a and b
         for c in ops:
-             
             if sp(c, b) == 1:      # c anticommutes with b -> add a to c
                 c = c + a
-            if sp(c, a) == 1:      # c anticommutes with a ->  add b to c
+            if sp(c, a) == 1:      # c anticommutes with a -> add b to c
                 c = c + b
             new_ops.append(c)
         ops = new_ops

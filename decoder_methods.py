@@ -5,6 +5,7 @@ from galois import GF2
 import networkx as nx
 from tableau import tableau2paulistring
 from stabiliser_code import create_graph_code
+import tableau as ta
 
 
 
@@ -40,7 +41,7 @@ def make_given_logical_unlikely(channel_probs, num_qubits, logical, p_punish: fl
     Punish the decoder channel on the TXZY support of a found solution vector logical
     (x|z repr), so BP+OSD avoids returning that same vector again. In place.
     """
-    logical = sc.to_gf2_tableau(logical)
+    logical = ta.to_gf2_tableau(logical)
 
     if logical.ndim == 2 and logical.shape[1] // 2 != num_qubits:
         raise ValueError(f"Logical on {logical.shape[1]//2} qubits, but num_qubits is {num_qubits}")
@@ -50,7 +51,7 @@ def make_given_logical_unlikely(channel_probs, num_qubits, logical, p_punish: fl
     assert channel_probs.ravel().shape[0] == 3 * num_qubits, \
         f"channel_probs must have {3*num_qubits} entries"
 
-    logical_txzy = sc.turn_tableau_into_TXZY(logical)     
+    logical_txzy = ta.turn_tableau_into_TXZY(logical)     
     nonzero = np.asarray(logical_txzy).ravel().astype(bool)
 
     channel_probs[nonzero] = p_punish
@@ -85,11 +86,13 @@ def find_first_short_logical_in_coset(T, logi_commute, logi_anticommute,
         raise ValueError('T not full rank')
 
     n_qubits = T.shape[1] // 2
-    T = sc.to_gf2_tableau(T)
+    T = ta.to_gf2_tableau(T)
 
-    logi_anticommute = sc.to_gf2_tableau(logi_anticommute)
-    logi_commute = sc.to_gf2_tableau(logi_commute)
-    remaining_logicals = [sc.to_gf2_tableau(remaining_logicals) for r in remaining_logicals]
+    logi_anticommute = ta.to_gf2_tableau(logi_anticommute)
+    logi_commute = ta.to_gf2_tableau(logi_commute)
+    remaining_logicals = [ta.to_gf2_tableau(r) for r in remaining_logicals]
+
+
      
     if channel_probs is None:
         channel_probs = np.full(3 * n_qubits, 0.1)
@@ -99,12 +102,14 @@ def find_first_short_logical_in_coset(T, logi_commute, logi_anticommute,
         #bias qubit support on qubit o
 
     T_aug = T
+    print('T_aug shape',T_aug.shape)
     for r in remaining_logicals:
-        T_aug = sc.append_logical_to_tableau(T_aug, remaining_logicals)
+         
+        T_aug = sc.append_logical_to_tableau(T_aug, r)
 
     T_aug = sc.append_logical_to_tableau(T_aug, logi_commute)
     T_aug = sc.append_logical_to_tableau(T_aug, logi_anticommute)
-    T_aug = sc.turn_tableau_into_TXZY(T_aug)
+    T_aug = ta.turn_tableau_into_TXZY(T_aug)
 
     r = sc.rank_F2(T_aug)
     if r < T_aug.shape[0]:
@@ -126,7 +131,7 @@ def find_first_short_logical_in_coset(T, logi_commute, logi_anticommute,
     if not np.array_equal(np.asarray(actual).astype(int), np.asarray(syndrome_1d).astype(int)):
         return None, channel_probs
 
-    result_tab = sc.turn_TXZYerror_into_tableau(result.reshape(1, -1))
+    result_tab = ta.turn_TXZYerror_into_tableau(result.reshape(1, -1))
  
     v = np.asarray(result_tab).ravel().astype(int)
     
@@ -134,7 +139,7 @@ def find_first_short_logical_in_coset(T, logi_commute, logi_anticommute,
     if o is not None and not (v[o] or v[o + n_qubits]):
         return None, channel_probs
 
-    return sc.to_gf2_tableau(v.reshape(1, -1)), channel_probs
+    return ta.to_gf2_tableau(v.reshape(1, -1)), channel_probs
  
 
 def find_short_first_logical(T,other_logical_repr,CSS:bool=False,max_iter:int=100,channel_probs=None): #TODO: what happens if result is None? This may happen?
@@ -151,7 +156,7 @@ def find_short_first_logical(T,other_logical_repr,CSS:bool=False,max_iter:int=10
 
     n_qubits=T.shape[1]//2 #integer division
 
-    T=sc.to_gf2_tableau(T)
+    T=ta.to_gf2_tableau(T)
 
     if isinstance(other_logical_repr,list):
         other_logical_repr=sc.tableau_list_to_matrix(other_logical_repr)
@@ -161,7 +166,7 @@ def find_short_first_logical(T,other_logical_repr,CSS:bool=False,max_iter:int=10
         pass
 
     T=sc.append_logical_to_tableau(T,other_logical_repr)
-    T=sc.turn_tableau_into_TXZY(T)
+    T=ta.turn_tableau_into_TXZY(T)
 
     syndrome = np.zeros(T.shape[0], dtype=int)
     syndrome[-1]=1 #assumes logical qubit is last row
@@ -190,7 +195,7 @@ def find_short_first_logical(T,other_logical_repr,CSS:bool=False,max_iter:int=10
 
     result=result.reshape(1, -1)
 
-    return sc.turn_TXZYerror_into_tableau(result),channel_probs
+    return ta.turn_TXZYerror_into_tableau(result),channel_probs
 
 
 def find_short_second_logical(T,first_logical,CSS:bool=False,\
@@ -204,7 +209,7 @@ def find_short_second_logical(T,first_logical,CSS:bool=False,\
 
     n_qubits=T.shape[1]//2 #integer division
 
-    T=sc.to_gf2_tableau(T)
+    T=ta.to_gf2_tableau(T)
 
     if isinstance(first_logical,list):
         first_logical=sc.tableau_list_to_matrix(first_logical)
@@ -213,7 +218,7 @@ def find_short_second_logical(T,first_logical,CSS:bool=False,\
         pass
 
     T=sc.append_logical_to_tableau(T,first_logical)
-    T=sc.turn_tableau_into_TXZY(T)
+    T=ta.turn_tableau_into_TXZY(T)
 
     syndrome = np.zeros(T.shape[0], dtype=int)
     syndrome[-1]=1 #assumes logical qubit is last row
@@ -244,7 +249,7 @@ def find_short_second_logical(T,first_logical,CSS:bool=False,\
 
     result=result.reshape(1, -1)
 
-    return sc.turn_TXZYerror_into_tableau(result)
+    return ta.turn_TXZYerror_into_tableau(result)
 
 
 

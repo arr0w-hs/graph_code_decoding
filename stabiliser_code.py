@@ -87,6 +87,7 @@ def update_tableau_after_measurements(tableau : GF2, measurements : list):
     return tab_copy
 
 def append_logical_to_tableau(tableau,logical):
+    
     num_qubits=tableau.shape[1]//2 #note that this does not assume CSS form
     if type(logical)==str:
         logical=ta.paulistring2tableau(logical,num_qubits)
@@ -505,7 +506,6 @@ def find_logical_op_basis(tableau_matrix,n_qubits,CSS:bool=False):
 
 
     else:
-
 
         logicals=find_ker_minus_rowspace(T,CSS=CSS) #TODO check if working correctly
 

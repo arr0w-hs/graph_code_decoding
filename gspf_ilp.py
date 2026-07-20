@@ -740,42 +740,49 @@ def generalised_spf_logical_heuristic(tableau, lost_qubits: list,
 
     num_logical_qubits_remain=len(reduced_logicals)//2
 
-    Omega = ta.to_gf2_tableau(ta.construct_Omega_Matrix(num_qubits_remain))
-
-
     X_logical_qubit = ta.to_gf2_tableau(logi_commute_clean).ravel()
     Z_logical_qubit = ta.to_gf2_tableau(logi_anticommute_clean).ravel()
+    additional_logicals = []
 
     if num_logical_qubits_remain>1:
-        additional_logicals = []
+        
         #making the additional logicals commute with X and Z
         for lg in reduced_logicals:
 
             c = ta.to_gf2_tableau(lg).ravel()
+             
 
             if ta.sp(c, Z_logical_qubit) == 1:
+                
                 c = c + X_logical_qubit
+                 
             if ta.sp(c, X_logical_qubit) == 1:
+                 
                 c = c + Z_logical_qubit
-
+                 
             if np.asarray(c).any(): #this makes sure to only add c to the additional logicals if it was not
                 #equal to X_logical_qubit or Z_logical_qubit
                 additional_logicals.append(c)
+        additional_logicals=ta.to_gf2_tableau(additional_logicals)
+        additional_logicals=additional_logicals.row_reduce()
+         
+        additional_logicals = additional_logicals[np.any(additional_logicals, axis=1)]
+   
 
-    additional_logical_pairs = ta.symplectic_basis(additional_logicals, num_qubits_remain)
+        additional_logical_pairs = ta.symplectic_basis(additional_logicals)
+        additional_logicals=[] #now appending to a list
 
-    additional_logicals=[]
-    for (Xa, Za) in additional_logical_pairs:
-        additional_logicals.append(ta.to_gf2_tableau(Xa).ravel())
-        additional_logicals.append(ta.to_gf2_tableau(Za).ravel())
-
+        for (Xa, Za) in additional_logical_pairs:
+            additional_logicals.append(ta.to_gf2_tableau(Xa).ravel())
+            additional_logicals.append(ta.to_gf2_tableau(Za).ravel())
+        
     #-------------------------------------------------------------------------------------------------------#
     #find short logical that commutes with logi_commute and anti-commutes with logi_anti_commute_clean
     #passing a symplectic basis to decoder, otherwise there cannot be a solution!
 
     short_first, channel_probs = dc.find_first_short_logical_in_coset(
         T_clean, logi_anticommute=logi_anticommute_clean, logi_commute=logi_commute_clean,
-        accidental_logicals=additional_logicals, o=target_reduced, max_iter=max_iter)
+        remaining_logicals=additional_logicals, o=target_reduced, max_iter=max_iter)
 
     if short_first is None: #decoder failed
         return result
@@ -816,16 +823,16 @@ def generalised_spf_logical_heuristic(tableau, lost_qubits: list,
 
 
     if not return_reduced_form:
-        x = sc.restore_lost_qubits(x, indices, num_qubits)
-        z = sc.restore_lost_qubits(z, indices, num_qubits)
+        x = sc.restore_lost_qubits(short_first, indices, num_qubits)
+        z = sc.restore_lost_qubits(short_second, indices, num_qubits)
 
     result = {
         "success": True,
         "status": None,
         "status_name": "heuristic",
         "objective": None,
-        "x": short_first,
-        "z": short_second, #this designation is arbitrary
+        "x": x,
+        "z": z, #this designation is arbitrary
         "support_size": None,
         "bx": None,
         "bz": None,
@@ -854,6 +861,8 @@ if __name__ == "__main__":
 
     previous_meas = ["Z2", "X2","X6"]
 
+    previous_meas=[]
+
     # print(previous_meas)
     # previous_meas = ["Z1", "X2"]
     previous_meas = [ta.paulistring2tableau(ele, numq) for ele in previous_meas]
@@ -861,11 +870,8 @@ if __name__ == "__main__":
 
     lq = np.unique(np.random.randint(0, numq, numq//4))
     # lq = []
-    s = str()
-    for ele in lq:
-        s += "Y"+str(ele)+"*"
-    s = s[:-1]
-    print("lq: ", lq)
+ 
+    print("lost qubits: ", lq)
     # lq = ta.paulistring2tableau("Y0", numq)
     #lq = ta.paulistring2tableau(s, numq)
 
@@ -903,7 +909,8 @@ if __name__ == "__main__":
 
 
 
-    res = generalised_spf_logical_heuristic(T, lq, target_qubit=7)
+    res = generalised_spf_logical_heuristic(T, lq, target_qubit=6)
+
     if res['success']:
 
         xlo = res["x"]
@@ -912,3 +919,6 @@ if __name__ == "__main__":
         print("zlogical output from gspf", ta.tableau2paulistring(zlo))
 
         test_gspf(T, xlo, zlo, previous_meas, lq, g =gg)
+
+    else:
+        print('failure')
