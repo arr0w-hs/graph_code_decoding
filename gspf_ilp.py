@@ -613,7 +613,7 @@ if __name__ == "__main__":
     stabi=ta.to_gf2_tableau(stabi)
     numq=stabi.shape[1]//2
 
-    previous_meas = ["Z1*Z2", "X1*X2"]
+    previous_meas = ["Z2", "X2","X6"]
 
     print(previous_meas)
     # previous_meas = ["Z1", "X2"]
@@ -634,13 +634,15 @@ if __name__ == "__main__":
     T = ta.to_gf2_tableau(stabi)
     numq=T.shape[1]//2
     print('number of qubits')
-    lost_qubits=[8,4,5]
-    res =  generalised_spf_logical(T,previous_meas, lost_qubits, gg,target_qubit = 7, minimise_support=False)
+    lost_qubits=[10,4,5]
+    t=0
+    res =  generalised_spf_logical(T,previous_meas, lost_qubits, gg,target_qubit = t, minimise_support=True)
     print('lost_qubits',lost_qubits)
     # res = generalised_spf_logical(stabi, xlogi, zlogi, previous_meas, lost_qubits, gg, target_qubit=None)
     # print(res)
     print("success: ",res['success'])
     xlo = res["x"]
     zlo = res["z"]
-    print("xlogical output from gspf", ta.tableau2paulistring(xlo))
-    print("zlogical output from gspf", ta.tableau2paulistring(zlo))
+    if res['success']:
+        print("xlogical output from gspf", ta.tableau2paulistring(xlo))
+        print("zlogical output from gspf", ta.tableau2paulistring(zlo))
