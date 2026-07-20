@@ -146,6 +146,245 @@ def find_gspf_one_logical(tableau : list[list], logical: list,
         return status
 
 
+
+def generalised_spf_logical_old(tableau : np.ndarray, xlogical: list,
+                    zlogical : list,
+                    measurements : list[list], lost_qubits : list,
+                    g : int,
+                    target_qubit = None,
+                    minimise_support = True):
+    """
+    Find a logical satisfying g-SPF algebra of GF2.
+
+    Parameters
+    ----------
+    tableau : numpy array
+        Tableau of the stabiliser code with stabilisers.
+        The representation is X part then Z part ( X | Z ).
+
+    xlogical : list
+        The original X-logical that sets the afine space
+        Can be X logical or Z logical.
+
+    zlogical : list
+        The original Z-logical that sets the afine space
+
+    other_logical : list
+        'other_logical' is the starting point of the other logical.
+        If logical is X (Z) then other_logical has to be Z (X)
+
+    measurements : list of list
+        List of previously completed measurements.
+        Each measuremnet in the list is a single qubit measurement
+        represented in the tableau form ( X | Z ).
+
+    lost_qubits : list
+        List containing the index of lost qubits
+
+    g : int
+        The g in 'g-SPF'.
+
+    target_qubit : int
+        The required output qubit. Currently only of length 1, could be made a list.
+
+    Returns
+    -------
+    A loss-tolerant representation of the 'logical' satisfying g-SPF.
+
+    """
+
+    T = GF2(tableau)
+
+    num_stab, m = T.shape
+    num_qubits = m // 2
+    assert m % 2 == 0, "Tableau length must be even"
+    assert len(xlogical) == m, f"xlogical must have length {m}"
+    assert len(zlogical) == m, f"zlogical must have length {m}"
+    assert len(lost_qubits) <= num_qubits, f"lost_qubits must have length {m}"
+    assert g >= 1, "g must be at least 1"
+
+    for meas in measurements:
+        assert len(meas) == m, f"measurement must have length {m}"
+    lq = lost_qubits.copy()
+    lost_qubits = [0]*2*num_qubits
+    for ele in lq:
+        lost_qubits[ele] = 1
+        lost_qubits[ele+num_qubits] = 1
+    # Model
+    model = cp_model.CpModel()
+
+    # binary variable vector [B_x|B_z]
+    bx = [model.NewBoolVar(f"bx_{i}") for i in range(num_stab)]
+    bz = [model.NewBoolVar(f"bz_{i}") for i in range(num_stab)]
+
+    bxt = [sum(bx[i] * int(T[i, j]) for i in range(num_stab)) for j in range(m)]
+    bzt = [sum(bz[i] * int(T[i, j]) for i in range(num_stab)) for j in range(m)]
+
+    # minimise the x logical
+    xmod2_terms = []
+    for j in range(m):
+        raw = xlogical[j] + bxt[j]
+        max_raw = 1 + sum(int(T[i, j]) for i in range(num_stab))
+        k = model.NewIntVar(0, max_raw // 2, f"kx_{j}")
+        mod2_expr = raw - 2 * k
+        model.Add(mod2_expr >= 0)
+        model.Add(mod2_expr <= 1)
+        xmod2_terms.append(mod2_expr)
+
+    support = []
+    xlogical_x_part = xmod2_terms[:num_qubits]
+    xlogical_z_part = xmod2_terms[num_qubits:]
+    for q in range(num_qubits):
+        sq = model.NewBoolVar(f"supportx_{q}")
+        model.Add(sq >= xlogical_x_part[q])
+        model.Add(sq >= xlogical_z_part[q])
+        model.Add(sq <= xlogical_x_part[q] + xlogical_z_part[q])
+        support.append(sq)
+
+    # minimise the z logical
+    zmod2_terms = []
+    for j in range(m):
+        raw = zlogical[j] + bzt[j]
+        max_raw = 1 + sum(int(T[i, j]) for i in range(num_stab))
+        k = model.NewIntVar(0, max_raw // 2, f"kz_{j}")
+        mod2_expr = raw - 2 * k
+        model.Add(mod2_expr >= 0)
+        model.Add(mod2_expr <= 1)
+        zmod2_terms.append(mod2_expr)
+
+    # support = []
+    zlogical_x_part = zmod2_terms[:num_qubits]
+    zlogical_z_part = zmod2_terms[num_qubits:]
+    for q in range(num_qubits):
+        sq = model.NewBoolVar(f"supportz_{q}")
+        model.Add(sq >= zlogical_x_part[q])
+        model.Add(sq >= zlogical_z_part[q])
+        model.Add(sq <= zlogical_x_part[q] + zlogical_z_part[q])
+        support.append(sq)
+
+
+    # lost qubits constraints
+    xraw_L = sum(int(lost_qubits[j]) * xmod2_terms[j] for j in range(m))
+    zraw_L = sum(int(lost_qubits[j]) * zmod2_terms[j] for j in range(m))
+    # max_raw_L = sum(int(lost_qubits[j]) for j in range(m))
+    # r = model.NewIntVar(0, max_raw_L // 2, "logical_constraint_k")
+    model.Add(xraw_L == 0)
+    model.Add(zraw_L == 0)
+
+
+    # measurement constraints X
+    for i, meas in enumerate(measurements):
+        meas_x = meas[:num_qubits]
+        meas_z = meas[num_qubits:]
+
+        raw = sum(
+            int(meas_z[q]) * xlogical_x_part[q] + int(meas_x[q]) * xlogical_z_part[q]
+            for q in range(num_qubits)
+        )
+
+        k_comm = model.NewIntVar(0, num_qubits, f"commx_{i}")
+        model.Add(raw == 2 * k_comm)
+
+    # measurement constraints Z
+    for i, meas in enumerate(measurements):
+        meas_x = meas[:num_qubits]
+        meas_z = meas[num_qubits:]
+
+        raw = sum(
+            int(meas_z[q]) * zlogical_x_part[q]
+            + int(meas_x[q]) * zlogical_z_part[q]
+            for q in range(num_qubits)
+        )
+
+        k_comm = model.NewIntVar(0, num_qubits, f"commz_{i}")
+        model.Add(raw == 2 * k_comm)
+
+    # constraint for g-SPF
+    anti_terms = []
+    for q in range(num_qubits):
+        z = model.NewBoolVar(f"z_{q}")  # z = x AND y
+        model.Add(z <= zlogical_z_part[q])
+        model.Add(z <= xlogical_x_part[q])
+        model.Add(z >= xlogical_x_part[q] + zlogical_z_part[q] - 1)
+
+
+        z2 = model.NewBoolVar(f"z2_{q}")  # z = x AND y
+        model.Add(z2 <= xlogical_z_part[q])
+        model.Add(z2 <= zlogical_x_part[q])
+        model.Add(z2 >= zlogical_x_part[q] + xlogical_z_part[q] - 1)
+
+        # anit_comm = zlogical_z_part[q] * xlogical_x_part[q] + zlogical_x_part[q] * xlogical_z_part[q]
+        anti_comm = z + z2
+
+
+        anti_q = model.NewIntVar(0, 1, f"anti_{q}")
+        k_anti = model.NewIntVar(0, 1, f"k_anti_{q}")
+
+        if q == target_qubit:# and target_qubit is not None:
+            model.Add(anti_q == 1)
+
+        model.Add(anti_q == anti_comm - 2 * k_anti)
+        anti_terms.append(anti_q)
+
+    # model.Add(sum(anti_terms) <= g)
+    anti_sum = sum(anti_terms)
+    model.Add(anti_sum <= g)
+
+    k_total = model.NewIntVar(0, num_qubits, "k_total_anti")
+    model.Add(anti_sum == 2 * k_total + 1)
+
+    # objective function
+    if minimise_support:
+        model.Minimize(sum(support))
+
+
+    solver = cp_model.CpSolver()
+    solver.parameters.max_time_in_seconds = 60
+    solver.parameters.num_search_workers = 8
+
+    status = solver.Solve(model)
+
+    # print("Status:", solver.StatusName(status))
+    status_name = solver.StatusName(status)
+
+    if status in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+        x = [solver.Value(v) for v in xmod2_terms]
+        z = [solver.Value(v) for v in zmod2_terms]
+
+        result = {
+            "success": True,
+            "status": status,
+            "status_name": status_name,
+            "objective": solver.ObjectiveValue(),
+            "x": x,
+            "z": z,
+            "support_size": [solver.Value(v) for v in support],
+            "bx": np.array([solver.Value(bx[i]) for i in range(num_stab)], dtype=int),
+            "bz": np.array([solver.Value(bz[i]) for i in range(num_stab)], dtype=int),
+        }
+
+        # print("Minimum support:", result["objective"])
+        # print("mod2 vector:", z)
+        # print("support:", result["support_size"])
+        # print(ta.tableau2paulistring(z))
+        # print(ta.tableau2paulistring(x))
+
+    else:
+        result = {
+            "success": False,
+            "status": status,
+            "status_name": status_name,
+            "objective": None,
+            "x": xlogical,
+            "z": zlogical,
+            "support": None,
+            "bx": None,
+            "bz": None,
+        }
+
+    return result
+
+
 def generalised_spf_logical(tableau : np.ndarray,
                     measurements : list[list], lost_qubits : list,
                     g : int,
@@ -317,15 +556,15 @@ def generalised_spf_logical(tableau : np.ndarray,
         m= sc.kick_out_qubits(m,lost_qubits)
         if m.any():
             new_meas.append(m.ravel())#making meas 1D-array, the shapeshifting is a bit of a mess
-        
-        
+
+
     # measurement constraints X
     for i, meas in enumerate(new_meas):
-       
-     
+
+
         meas_x = meas[:num_qubits_remain]
         meas_z = meas[num_qubits_remain:]
-         
+
         raw = sum(
             int(meas_z[q]) * xlogical_x_part[q] + int(meas_x[q]) * xlogical_z_part[q]
             for q in range(num_qubits_remain)
@@ -433,8 +672,6 @@ def generalised_spf_logical(tableau : np.ndarray,
         }
 
     return result
-
-
 
 
 def generalised_spf_logical_heuristic(tableau, lost_qubits: list,
@@ -600,49 +837,66 @@ def generalised_spf_logical_heuristic(tableau, lost_qubits: list,
 if __name__ == "__main__":
     from test_suite import test_gspf
     # print()
-    numq = 20
-    g = nx.erdos_renyi_graph(numq, 0.7)
+    numq = 10
+    g = nx.erdos_renyi_graph(numq, 0.57)
     # g = nx.cycle_graph(numq)
     g = nx.to_numpy_array(g, dtype = np.uint16)
 
     xlogi, zlogi, stabi = dc.create_graph_code(g)
+    print("xlogical input", ta.tableau2paulistring(xlogi))
+    print("zlogical input", ta.tableau2paulistring(zlogi))
 
     #numq -= 1 #jelena: idk if this number of qubits correspondence is correct?
     gg = 1
-    
+
     stabi=ta.to_gf2_tableau(stabi)
     numq=stabi.shape[1]//2
 
     previous_meas = ["Z2", "X2","X6"]
 
-    print(previous_meas)
+    # print(previous_meas)
     # previous_meas = ["Z1", "X2"]
     previous_meas = [ta.paulistring2tableau(ele, numq) for ele in previous_meas]
-    
 
-    """lost_qubits = np.unique(np.random.randint(0, numq, numq//3))
+
+    lost_qubits = np.unique(np.random.randint(0, numq, numq//4))
     # lost_qubits = []
     s = str()
     for ele in lost_qubits:
         s += "Y"+str(ele)+"*"
     s = s[:-1]
-    print("lost_qubits: ", lost_qubits, s)"""
+    print("lost_qubits: ", lost_qubits, s)
     # lost_qubits = ta.paulistring2tableau("Y0", numq)
     #lost_qubits = ta.paulistring2tableau(s, numq)
 
 
     T = ta.to_gf2_tableau(stabi)
     numq=T.shape[1]//2
-    print('number of qubits')
-    lost_qubits=[10,4,5]
-    t=0
-    res =  generalised_spf_logical(T,previous_meas, lost_qubits, gg,target_qubit = t, minimise_support=True)
+
+    # lost_qubits=[8,4,5]
+    res =  generalised_spf_logical(T,previous_meas, lost_qubits, gg,target_qubit = 7, minimise_support=True)
     print('lost_qubits',lost_qubits)
     # res = generalised_spf_logical(stabi, xlogi, zlogi, previous_meas, lost_qubits, gg, target_qubit=None)
     # print(res)
-    print("success: ",res['success'])
-    xlo = res["x"]
-    zlo = res["z"]
+    # print("success: ",res['success'])
     if res['success']:
-        print("xlogical output from gspf", ta.tableau2paulistring(xlo))
-        print("zlogical output from gspf", ta.tableau2paulistring(zlo))
+        xlo = res["x"]
+        zlo = res["z"]
+        print("xlogical output from gspf", ta.tableau2paulistring(xlogi))
+        print("zlogical output from gspf", ta.tableau2paulistring(zlogi))
+
+        test_gspf(T, xlo, zlo, previous_meas, lost_qubits, g =gg)
+
+    print("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
+    res =  generalised_spf_logical_old(T,xlogi, zlogi, previous_meas, lost_qubits, gg,target_qubit = 7, minimise_support=True)
+    print('lost_qubits',lost_qubits)
+    # res = generalised_spf_logical(stabi, xlogi, zlogi, previous_meas, lost_qubits, gg, target_qubit=None)
+    # print(res)
+    # print("success: ",res['success'])
+    if res['success']:
+        xlo = res["x"]
+        zlo = res["z"]
+        print("xlogical output from gspf", ta.tableau2paulistring(xlogi))
+        print("zlogical output from gspf", ta.tableau2paulistring(zlogi))
+
+        test_gspf(T, xlo, zlo, previous_meas, lost_qubits, g =gg)
