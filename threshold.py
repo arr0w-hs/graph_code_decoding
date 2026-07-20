@@ -83,7 +83,7 @@ def sample_lost_qubits(num_qubits, p, exclude=None, rng=None):
 
 
 def compute_teleportation_rate(T,p:float,\
-                      target_qubit:int=None,max_cache_size:int=None,method:str='heuristic',num_shots:int=2000):
+                      target_qubit:int=None,g:int=None,max_cache_size:int=1000,method:str='deterministic',num_shots:int=2000):
     cache = []
 
     num_qubits=T.shape[1]//2
@@ -117,9 +117,11 @@ def compute_teleportation_rate(T,p:float,\
 
         solves += 1
         if method=='heuristic':
+            assert g is None, 'for heuristic method g cannot be specified'
             res = generalised_spf_logical_heuristic(stabi,  lq, target_qubit=target_qubit)
         elif method=='ILP':
-            res=generalised_spf_logical(stabi,  lq, target_qubit=target_qubit)
+            meas=[]
+            res=generalised_spf_logical(stabi, meas, lq,g, target_qubit=target_qubit) #this assumes no meas have happend
 
         else:
             raise ValueError(f"Method {method} not recognised")
@@ -181,7 +183,7 @@ if __name__ == "__main__":
 
         # xlogi, zlogi, stabi = create_graph_code(g)
 
-        T = GF2(stabi)
+        T = ta.to_gf2_tableau(T)
         numq=T.shape[1]//2
         gg = 1
         previous_meas = []
@@ -195,6 +197,12 @@ if __name__ == "__main__":
                 previous_meas, numq, gg, num_shots)
             for p in lost_prob
         ]
+
+        # i cannot import surface code but here is how you implement this with the functin abive
+        #args=[(T,p,None,gg) for p in lost_prob] #not sure if this works
+        #fail_list,_=Parallel(n_jobs=-1)(
+            #delayed(compute_teleportation_rate)(arg) for arg in args
+        #) #can we make them communicate somehow?
 
         fail_list = Parallel(n_jobs=-1)(
             delayed(run_p)(arg) for arg in args
