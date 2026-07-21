@@ -384,6 +384,34 @@ def generalised_spf_logical_old(tableau : np.ndarray, xlogical: list,
 
     return result
 
+def initialise_logical_basis(tableau: np.ndarray): 
+
+    T = ta.to_gf2_tableau(tableau) #this also catches if T is a string
+    num_qubits=T.shape[1]//2
+    _,_,logicals=sc.find_logical_op_basis(T,num_qubits)
+
+    #turn into symplectic basis
+    symplectic_basis=ta.symplectic_basis(logicals)
+
+
+    return T, symplectic_basis
+
+def update_T_and_logi_after_loss(T:np.ndarray,logicals:list,lost_qubits:list):
+
+    op_indices=[]
+    for i, l in enumerate(logicals):
+
+        l,l_indices=sc.find_clean_logical(T,l,lost_qubits) #this already removes the lost qubits entirely
+        logicals[i]=l
+        op_indices.append(l_indices)
+        if l is None: 
+            return T,logicals,None,False
+            
+    T = ta.to_gf2_tableau(T)
+    T,_,indices=sc.remove_lost_qubits_from_tableau(T,lost_qubits) #indices to remember which qubits removed
+    assert all(np.array_equal(op_indices[j], indices) for j in range(len(logicals))), "clean/reduce index mismatch"
+
+    return T,logicals,indices,True
 
 def generalised_spf_logical(tableau : np.ndarray,
                     measurements : list[list], lost_qubits : list,
@@ -448,26 +476,25 @@ def generalised_spf_logical(tableau : np.ndarray,
             lost_qubits=list(lost_qubits)
 
     #remove lost qubits, keep indices
-    num_stab, m = T.shape
+    _, m = T.shape
     num_qubits = m // 2
-    _,_,logicals=sc.find_logical_op_basis(T,num_qubits)
-    xlogi=ta.to_gf2_tableau(logicals[0])
-    zlogi=ta.to_gf2_tableau(logicals[1]) #arbitrary designation
 
     assert m % 2 == 0, "Tableau length must be even"
     assert all(0 <= x <= num_qubits-1 for x in lost_qubits), f"Lost qubits can only contain qubits indices from 0 to {num_qubits-1}"
     assert g >= 1, "g must be at least 1"
-    assert len(logicals)==2, f"There must only be one logical qubits, here there are {len(logicals)//2}."
 
-    xlogi,x_indices=sc.find_clean_logical(T,xlogi,lost_qubits) #this already removes the lost qubits entirely
-    zlogi,z_indices=sc.find_clean_logical(T,zlogi,lost_qubits)
+    T, symplectic_basis=initialise_logical_basis(T)
+    assert len(symplectic_basis)==1, f"There must only be one logical qubits, here there are {len(logicals)//2}."
 
-    if xlogi is None or zlogi is None: #no clean logi exists, information destroyed
+    xlogi,zlogi=symplectic_basis[0] #initialise_logical_basis gives back a tuple
+    xlogi=ta.to_gf2_tableau(xlogi)
+    zlogi=ta.to_gf2_tableau(zlogi) #arbitrary designations
+
+    T, logicals,indices, success=update_T_and_logi_after_loss(T,[xlogi,zlogi],lost_qubits)
+ 
+    if not success: #no clean logi exists, information destroyed
         return result
-
-    T,_,indices=sc.remove_lost_qubits_from_tableau(T,lost_qubits) #indices to remember which qubits removed
-
-    assert np.array_equal(x_indices, indices) and np.array_equal(z_indices, indices), "clean/reduce index mismatch"
+    
     num_stab_remain, m_remain = T.shape
     num_qubits_remain = m_remain // 2
 
@@ -641,8 +668,8 @@ def generalised_spf_logical(tableau : np.ndarray,
         z=ta.to_gf2_tableau(z)
 
         if not return_reduced_form:
-            x=sc.restore_lost_qubits(x,x_indices,num_qubits)
-            z=sc.restore_lost_qubits(z,z_indices,num_qubits)
+            x=sc.restore_lost_qubits(x,indices,num_qubits)
+            z=sc.restore_lost_qubits(z,indices,num_qubits)
 
         result = {
             "success": True,

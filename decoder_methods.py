@@ -102,7 +102,7 @@ def find_first_short_logical_in_coset(T, logi_commute, logi_anticommute,
         #bias qubit support on qubit o
 
     T_aug = T
-    print('T_aug shape',T_aug.shape)
+    
     for r in remaining_logicals:
          
         T_aug = sc.append_logical_to_tableau(T_aug, r)
