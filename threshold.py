@@ -22,18 +22,19 @@ def run_p(args):
 
     for _ in range(num_shots):
         # lq = sample_lost_nodes(g, p)
-        # lost_cols = [node - 1 for node in lq]
-
-
-        rng = random.Random()
-        eligible_nodes = [ node for node in range(numq)]
-        lq =  [node for node in eligible_nodes if rng.random() < p]
-
-
+        # lq = [node - 1 for node in lq]
         # lost_qubits = [0] * (2 * numq)
         # for c in lost_cols:
         #     lost_qubits[c] = 1
         #     lost_qubits[c + numq] = 1
+
+
+
+        rng = random.Random()
+        # lq =  [node for node in range(numq) if rng.random() < p and node != numq-1]
+        lq =  [node for node in range(numq) if rng.random() < p]
+
+
 
         # res = generalised_spf_logical_old(
         #     stabi,
@@ -50,7 +51,7 @@ def run_p(args):
             previous_meas,
             lq,
             gg,
-            target_qubit=numq - 1,
+            target_qubit=None,
             minimise_support=False
         )
 
@@ -166,28 +167,27 @@ if __name__ == "__main__":
     # a = find_logical_op_basis(H, 9, CSS=True)
     # print(a)
 
-    num_shots = 1000
+    num_shots = 2000
     lost_prob = np.linspace(0,1,21)
-    for i in [3, 5, 7]:
+    for i in [3,5,7,9]:
         # cha = "hexagonal"
         # cha = "crazy graph"
         # g = hexagonal_lattice(i,i)
-        # g = crazy_graph(i,i)
-        # g = nx.to_numpy_array(g, dtype = np.uint16)
-        #numq = g.shape[0]-1
+        g = crazy_graph(i,i)
+        g = nx.to_numpy_array(g, dtype = np.uint16)
+        xlogi, zlogi, stabi = create_graph_code(g)
+
         _,_,H,xlogi, zlogi = rotated_surface_code(i)
         stabi = GF2(H)
         _,_,logicals = find_logical_op_basis(stabi, i)
         xlogi=ta.to_gf2_tableau(logicals[0])
         zlogi=ta.to_gf2_tableau(logicals[1])
 
-        # xlogi, zlogi, stabi = create_graph_code(g)
-
-        T = ta.to_gf2_tableau(T)
-        numq=T.shape[1]//2
-        gg = 1
+        numq=stabi.shape[1]//2
+        print(numq)
+        gg = 5
         previous_meas = []
-        previous_meas = [ta.paulistring2tableau(ele, numq) for ele in previous_meas]
+        # previous_meas = [ta.paulistring2tableau(ele, numq) for ele in previous_meas]
 
 
         fail_list = []
@@ -212,7 +212,7 @@ if __name__ == "__main__":
         yerr = np.sqrt(fail_list * (1 - fail_list) / num_shots)
 
         # plt.title(f"Threshold plot for {cha} channel")
-        plt.title(f"Threshold plot for rotate-surface code")
+        plt.title(f"Threshold plot for rotated-surface code")
         plt.errorbar(
             lost_prob,
             fail_list,
@@ -221,12 +221,12 @@ if __name__ == "__main__":
             label=f"Code is {i}x{i}"
         )
 
-        plt.xlabel("Loss Rate")
-        plt.ylabel("Rate of teleportation")
+    plt.xlabel("Loss Rate")
+    plt.ylabel("Rate of teleportation")
 
     plt.legend()
     plt.grid()
-    # plt.savefig(f"{cha}_threshold_5"+".pdf", dpi=800, format="pdf", bbox_inches = 'tight')
+    plt.savefig(f"plots/rotated_surfacecode_threshold_5_g{gg}_{num_shots}"+".pdf", dpi=800, format="pdf", bbox_inches = 'tight')
     plt.show()
 
 
