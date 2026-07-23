@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 from galois import GF2
 import tableau as ta
 
-from gspf_ilp import generalised_spf_logical, generalised_spf_logical_old,generalised_spf_logical_heuristic
+from generalised_spf import generalised_spf_logical, generalised_spf_logical_old,generalised_spf_logical_heuristic
 from spf_graphs import crazy_graph, sample_lost_nodes
 from decoder_methods import create_graph_code
 
