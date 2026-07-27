@@ -73,6 +73,7 @@ def gspf_ilp(tableau : np.ndarray, xlogical: list,
     for ele in lq:
         lost_qubits[ele] = 1
         lost_qubits[ele+num_qubits] = 1
+
     # Model
     model = cp_model.CpModel()
 
@@ -110,8 +111,8 @@ def gspf_ilp(tableau : np.ndarray, xlogical: list,
     xlogical_z_part = xmod2_terms[num_qubits:]
     zlogical_x_part = zmod2_terms[:num_qubits]
     zlogical_z_part = zmod2_terms[num_qubits:]
+    support = []
     if minimise_support:
-        support = []
         for q in range(num_qubits):
             sq = model.NewBoolVar(f"support_{q}")
             parts = [xlogical_x_part[q], xlogical_z_part[q],zlogical_x_part[q], zlogical_z_part[q]]
@@ -266,32 +267,84 @@ def gspf_ilp(tableau : np.ndarray, xlogical: list,
 
 def initialise_logical_basis(tableau: np.ndarray):
 
-    T = ta.to_gf2_tableau(tableau) #this also catches if T is a string
+    T = ta.to_gf2_tableau(tableau) # this also catches if T is a string
     num_qubits = T.shape[1]//2
     _, _, logicals = sc.find_logical_op_basis(T,num_qubits)
 
     #turn into symplectic basis
     symplectic_basis = ta.symplectic_basis(logicals)
 
-    return T, symplectic_basis
+    assert len(symplectic_basis) == 1, f"There must only be one logical qubits, \
+          here there are {len(symplectic_basis[0])//2}."
+
+    xlogical, zlogical = symplectic_basis[0] # initialise_logical_basis gives back a tuple
+    xlogical = ta.to_gf2_tableau(xlogical)
+    zlogical = ta.to_gf2_tableau(zlogical) # arbitrary designations
+
+    return T, xlogical, zlogical
 
 
-def update_T_and_logi_after_loss(T:np.ndarray, logicals:list, lost_qubits:list):
+def update_T_and_logi_after_loss(T : np.ndarray, logicals : list, lost_qubits : list):
 
     op_indices=[]
+    # removing lost qubits from logicals
     for i, l in enumerate(logicals):
 
         l, l_indices = sc.find_clean_logical(T, l, lost_qubits) #this already removes the lost qubits entirely
         logicals[i] = l
         op_indices.append(l_indices)
+
         if l is None:
-            return T,logicals,None,False
+            return T,logicals[0], logicals[1],None,False
+
 
     T = ta.to_gf2_tableau(T)
     T, _, indices = sc.remove_lost_qubits_from_tableau(T, lost_qubits) #indices to remember which qubits removed
-    assert all(np.array_equal(op_indices[j], indices) for j in range(len(logicals))), "clean/reduce index mismatch"
+    num_stab_remain, m_remain = T.shape
+    xlogical_reduced = ta.to_gf2_tableau(np.asarray(logicals[0]).ravel())
+    zlogical_reduced = ta.to_gf2_tableau(np.asarray(logicals[1]).ravel())
 
-    return T, logicals, indices, True
+    # removing lost qubits from tableau
+
+    assert all(np.array_equal(op_indices[j], indices) for j in range(len(logicals))), "clean/reduce index mismatch"
+    assert xlogical_reduced.shape == (m_remain,), f"xlogical width {xlogical_reduced.shape} != ({m_remain},)"
+    assert zlogical_reduced.shape == (m_remain,), f"zlogical width {zlogical_reduced.shape} != ({m_remain},)"
+    assert sc.rank_F2(T) == num_stab_remain, f"reduced tableau not full rank: rank {sc.rank_F2(T)} != {num_stab_remain} rows"
+
+    return T, xlogical_reduced, zlogical_reduced, indices, True
+
+
+def update_measurements_after_losses(measurements, lost_qubits, len_meas):
+
+    new_meas=[]
+    lost_qubits_set = set(lost_qubits)
+    for meas in measurements:
+        assert len(meas) == len_meas, f"measurement must have length {len_meas}"
+        assert not any(meas[qub] == 1 for qub in lost_qubits_set), (
+            "measurement contains a lost qubit")
+        meas = ta.to_gf2_tableau(meas)
+        meas = sc.kick_out_qubits(meas, lost_qubits)
+        if meas.any():
+            new_meas.append(list(meas.ravel())) # making meas 1D-array, the shapeshifting is a bit of a mess
+
+    return new_meas
+
+
+def update_target_after_losses(target_qubit, indices, num_qubits):
+
+    target_reduced = None
+    if target_qubit is not None:
+        assert target_qubit < num_qubits, f"Target qubit must be in range 0 - {num_qubits-1}"
+        if target_qubit not in indices: # target qubit lost
+            print("target qubit lost")
+            return False
+        else:
+            target_reduced = int(np.where(indices == target_qubit)[0][0])
+            return target_reduced
+    else:
+        return target_reduced
+
+
 
 
 def generalised_spf_logical(tableau : np.ndarray,
@@ -365,53 +418,23 @@ def generalised_spf_logical(tableau : np.ndarray,
     assert all(0 <= x <= num_qubits-1 for x in lost_qubits), f"Lost qubits can only contain qubits indices from 0 to {num_qubits-1}"
     assert g >= 1, "g must be at least 1"
 
-    T, symplectic_basis=initialise_logical_basis(T)
-    assert len(symplectic_basis)==1, f"There must only be one logical qubits, here there are {len(logicals)//2}."
+    T, xlogical, zlogical = initialise_logical_basis(T)
 
-    xlogical, zlogical=symplectic_basis[0] # initialise_logical_basis gives back a tuple
-    xlogical = ta.to_gf2_tableau(xlogical)
-    zlogical = ta.to_gf2_tableau(zlogical) # arbitrary designations
-
-    logicals = [xlogical, zlogical]
-    T, logicals, indices, success = update_T_and_logi_after_loss(T, logicals, lost_qubits)
-
-    if not success: #no clean logi exists, information destroyed
+    res_update = update_T_and_logi_after_loss(T, [xlogical, zlogical], lost_qubits)
+    T_reduced, xlogical_reduced, zlogical_reduced, indices, success = res_update
+    if not success: # no clean logi exists, information destroyed
         return result
 
-    num_stab_remain, m_remain = T.shape
-    # num_qubits_remain = m_remain // 2
+    target_reduced = update_target_after_losses(target_qubit, indices, num_qubits)
+    if target_reduced is False:
+        print("target qubit lost")
+        return result
 
-    xlogical = ta.to_gf2_tableau(np.asarray(logicals[0]).ravel())
-    zlogical = ta.to_gf2_tableau(np.asarray(logicals[1]).ravel())
+    meas_reduced = update_measurements_after_losses(measurements, lost_qubits, m)
 
-    assert xlogical.shape == (m_remain,), f"xlogical width {xlogical.shape} != ({m_remain},)"
-    assert zlogical.shape == (m_remain,), f"zlogical width {zlogical.shape} != ({m_remain},)"
-    assert sc.rank_F2(T) == num_stab_remain, \
-    f"reduced tableau not full rank: rank {sc.rank_F2(T)} != {num_stab_remain} rows"
-
-    if target_qubit is not None:
-        assert target_qubit < num_qubits, f"Target qubit must be in range 0 - {num_qubits-1}"
-        if target_qubit not in indices: #target qubit lost
-            print("target qubit lost")
-            return result
-        else:
-            target_reduced = int(np.where(indices == target_qubit)[0][0])
-
-    new_meas=[]
-    lost_qubits_set = set(lost_qubits)
-    for meas in measurements:
-        assert len(meas) == m, f"measurement must have length {m}"
-        assert not any(meas[qub] == 1 for qub in lost_qubits_set), (
-            "measurement contains a lost qubit")
-        meas = ta.to_gf2_tableau(meas)
-        meas = sc.kick_out_qubits(meas, lost_qubits)
-        if meas.any():
-            new_meas.append(list(meas.ravel())) # making meas 1D-array, the shapeshifting is a bit of a mess
-
-
-    result = gspf_ilp(T, xlogical, zlogical,
-                      new_meas,
-                      lost_qubit = [],
+    result = gspf_ilp(T_reduced, xlogical_reduced, zlogical_reduced,
+                      meas_reduced,
+                      lost_qubits = [],
                       g=g,
                       target_qubit=target_reduced,
                       max_time = max_time,
@@ -426,8 +449,6 @@ def generalised_spf_logical(tableau : np.ndarray,
         result['z'] = z
 
     return result
-
-
 
 
 def generalised_spf_logical_heuristic(tableau, lost_qubits: list,
@@ -598,56 +619,63 @@ def generalised_spf_logical_heuristic(tableau, lost_qubits: list,
 
 
 if __name__ == "__main__":
-    from test_suite import test_gspf
+    from gspf_tests import test_gspf
+    import time
     print()
-    numq = 17
+    numq = 20
     g = nx.erdos_renyi_graph(numq, 0.57)
     # g = nx.cycle_graph(numq)
     g = nx.to_numpy_array(g, dtype = np.uint16)
 
-    xlogi, zlogi, stabi = dc.create_graph_code(g)
-    print("xlogical input", ta.tableau2paulistring(xlogi))
-    print("zlogical input", ta.tableau2paulistring(zlogi))
+    xlogiii, zlogiii, stabi = dc.create_graph_code(g)
+    print("xlogical input", ta.tableau2paulistring(xlogiii))
+    print("zlogical input", ta.tableau2paulistring(zlogiii))
 
-    #numq -= 1 #jelena: idk if this number of qubits correspondence is correct?
     gg = 1
 
     stabi=ta.to_gf2_tableau(stabi)
     numq=stabi.shape[1]//2
 
-    previous_meas = ["Z2", "X4", "X6"]
+    previous_meas = ["X4", "X6", "X1*X2", "Z1*Z2"]
+    # previous_meas = []
     previous_meas = [ta.paulistring2tableau(ele, numq) for ele in previous_meas]
     T = ta.to_gf2_tableau(stabi)
     numq=T.shape[1]//2
-
     lq=[8,9,5]
-    res =  generalised_spf_logical(T,previous_meas, lq, gg, target_qubit=7, minimise_support=True)
-    print('lq',lq)
-    # res = generalised_spf_logical(stabi, xlogi, zlogi, previous_meas, lq, gg, target_qubit=None)
+    # print('lq',lq)
+
+    t1 = time.time()
+    res =  generalised_spf_logical(T,previous_meas, lq, gg, target_qubit=7, minimise_support=False)
+    print(time.time()-t1)
+
+    # res = generalised_spf_logical(stabi, xlogiii, zlogi, previous_meas, lq, gg, target_qubit=None)
     # print(res)
-    # print("success: ",res['success'])
+    print("success new: ",res['success'])
     if res['success']:
         xlo = res["x"]
         zlo = res["z"]
+        print("support_size", sum(res["support_size"]))
         print("xlogical output from gspf", ta.tableau2paulistring(xlo))
         print("zlogical output from gspf", ta.tableau2paulistring(zlo))
-
         test_gspf(T, xlo, zlo, previous_meas, lq, g=gg)
 
     print("\n ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n")
-    res =  gspf_ilp(T,xlogi, zlogi, previous_meas, lq, gg, target_qubit=7, minimise_support=True)
-    print("success: ",res['success'])
+    t1 = time.time()
+    res =  gspf_ilp(T,xlogiii, zlogiii, previous_meas, lq, gg, target_qubit=7, minimise_support=False)
+    print(time.time()-t1)
+    print("success old: ",res['success'])
     if res['success']:
         xlo = res["x"]
         zlo = res["z"]
+        print("support_size", sum(res["support_size"]))
         print("xlogical output from gspf", ta.tableau2paulistring(xlo))
         print("zlogical output from gspf", ta.tableau2paulistring(zlo))
-
         test_gspf(T, xlo, zlo, previous_meas, lq, g=gg)
 
 
-
+    # t1 = time.time()
     # res = generalised_spf_logical_heuristic(T, lq, target_qubit=6)
+    # print(time.time()-t1)
     # if res['success']:
     #     xlo = res["x"]
     #     zlo = res["z"]

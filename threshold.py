@@ -6,13 +6,14 @@ import matplotlib.pyplot as plt
 from galois import GF2
 import tableau as ta
 
-from generalised_spf import generalised_spf_logical, generalised_spf_logical_old,generalised_spf_logical_heuristic
+from generalised_spf import generalised_spf_logical, gspf_ilp ,generalised_spf_logical_heuristic
 from spf_graphs import crazy_graph, sample_lost_nodes
 from decoder_methods import create_graph_code
 
 
 from multiprocessing import Pool, cpu_count
 from joblib import Parallel, delayed
+plt.rcParams.update({'font.size': 14})
 
 
 def run_p(args):
@@ -36,7 +37,7 @@ def run_p(args):
 
 
 
-        # res = generalised_spf_logical_old(
+        # res = gspf_ilp(
         #     stabi,
         #     xlogi,
         #     zlogi,
@@ -46,13 +47,10 @@ def run_p(args):
         #     target_qubit=numq - 1
         # )
 
-        res = generalised_spf_logical(
+        res = generalised_spf_logical_heuristic(
             stabi,
-            previous_meas,
             lq,
-            gg,
             target_qubit=None,
-            minimise_support=False
         )
 
 
@@ -226,7 +224,7 @@ if __name__ == "__main__":
 
     plt.legend()
     plt.grid()
-    plt.savefig(f"plots/rotated_surfacecode_threshold_5_g{gg}_{num_shots}"+".pdf", dpi=800, format="pdf", bbox_inches = 'tight')
+    plt.savefig(f"plots/rotated_surfacecode_threshold_5_heu_g{gg}_{num_shots}"+".pdf", dpi=800, format="pdf", bbox_inches = 'tight')
     plt.show()
 
 
