@@ -87,7 +87,7 @@ def update_tableau_after_measurements(tableau : GF2, measurements : list):
     return tab_copy
 
 def append_logical_to_tableau(tableau,logical):
-    
+
     num_qubits=tableau.shape[1]//2 #note that this does not assume CSS form
     if type(logical)==str:
         logical=ta.paulistring2tableau(logical,num_qubits)
@@ -307,13 +307,14 @@ def find_anti_commuting_logi_at_O(T,first_logi,accidental_logicals,o): #TODO: cu
         return None                          # no such logical exists
     return v
 
-def pair_support(x, z, num_qubits, target_qubit):
+def pair_support(x, z, target_qubit):
+
 
     #counts the joint support of x and z
     x = np.asarray(x).ravel().astype(int)
     z = np.asarray(z).ravel().astype(int)
     supp = set()
-
+    num_qubits = len(x)//2
     for q in range(num_qubits):
         if q == target_qubit:
             continue
@@ -346,7 +347,7 @@ def remove_lost_qubits_from_tableau(T,lost_qubits:list,row_in_T_where_logical_be
             raise ValueError("lost_qubits must be list or numpy nd.array")
         else:
             lost_qubits=list(lost_qubits)
-            
+
     T=ta.to_gf2_tableau(T)
 
     num_qubits=T.shape[1]//2

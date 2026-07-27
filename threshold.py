@@ -1,4 +1,4 @@
-#importlib.reload(test_spf)
+import time
 import random
 import numpy as np
 import networkx as nx
@@ -10,6 +10,10 @@ from generalised_spf import generalised_spf_logical, gspf_ilp ,generalised_spf_l
 from spf_graphs import crazy_graph, sample_lost_nodes
 from decoder_methods import create_graph_code
 
+import stabiliser_code as sc
+from galois import GF2
+import codetable_sampler as cs
+from code_importer import rotated_surface_code, surface_code
 
 from multiprocessing import Pool, cpu_count
 from joblib import Parallel, delayed
@@ -37,21 +41,20 @@ def run_p(args):
 
 
 
-        # res = gspf_ilp(
-        #     stabi,
-        #     xlogi,
-        #     zlogi,
-        #     previous_meas,
-        #     lq,
-        #     gg,
-        #     target_qubit=numq - 1
-        # )
-
-        res = generalised_spf_logical_heuristic(
+        res = generalised_spf_logical(
             stabi,
+            previous_meas,
             lq,
+            gg,
             target_qubit=None,
+            minimise_support=False
         )
+
+        # res = generalised_spf_logical_heuristic(
+        #     stabi,
+        #     lq,
+        #     target_qubit=None,
+        # )
 
 
         # res = generalised_spf_logical_heuristic(
@@ -66,37 +69,37 @@ def run_p(args):
 
 
 
-def sample_lost_qubits(num_qubits, p, exclude=None, rng=None):
+def sample_lost_masks(num_qubits, p, num_shots = 1, exclude=None, rng=None):
 
     rng = np.random.default_rng(rng)
 
     # independent Bernoulli(p) loss per qubit
-    lost_mask = rng.random(num_qubits) < p
+    lost_masks = rng.random(size = (num_shots, num_qubits)) < p
 
     if exclude is not None:
-        lost_mask[exclude] = False
+        lost_masks[:, exclude] = False
 
-    lost_qubits = np.flatnonzero(lost_mask)
+    # lost_qubits = np.flatnonzero(lost_masks)
 
-    return lost_qubits, lost_mask
+    return lost_masks
 
 
-def compute_teleportation_rate(T,p:float,\
-                      target_qubit:int=None,g:int=None,max_cache_size:int=1000,method:str='deterministic',num_shots:int=2000):
+def compute_teleportation_rate(T, p, target_qubit : int=None, g : int=None,
+                    max_cache_size:int=2000,
+                    method:str='ILP',
+                    num_shots:int=2000):
     cache = []
-
     num_qubits=T.shape[1]//2
-
     teleportation_rate = []
 
     hits = 0
     solves = 0
-
     success = 0
+    lost_mask = sample_lost_masks(num_qubits, p, num_shots, exclude=target_qubit)
 
     for ele in range(num_shots):
-        lq,_ = sample_lost_qubits(num_qubits, p,exclude=target_qubit)
 
+        lq = np.flatnonzero(lost_mask[ele])
         lost_set = set(int(c) for c in lq)
 
         # --- cache lookup: any stored pattern that avoids all lost qubits? ---
@@ -117,19 +120,21 @@ def compute_teleportation_rate(T,p:float,\
         solves += 1
         if method=='heuristic':
             assert g is None, 'for heuristic method g cannot be specified'
-            res = generalised_spf_logical_heuristic(stabi,  lq, target_qubit=target_qubit)
+            t1 = time.time()
+            res = generalised_spf_logical_heuristic(T, lq, target_qubit=target_qubit) # this assumes no meas have happend
         elif method=='ILP':
             meas=[]
-            res=generalised_spf_logical(stabi, meas, lq,g, target_qubit=target_qubit) #this assumes no meas have happend
+            res=generalised_spf_logical(T, meas, lq, g, target_qubit=target_qubit)
 
         else:
             raise ValueError(f"Method {method} not recognised")
 
         if res["success"]:
             success += 1
+
             # --- cache the found pattern (full-width x, z) ---
 
-            supp = ta.pair_support(res["x"], res["z"], numq, target_qubit)
+            supp = sc.pair_support(res["x"], res["z"], target_qubit)
             if supp is not None and supp not in cache:
                 cache.append(supp)
                 if len(cache) > max_cache_size:
@@ -140,50 +145,29 @@ def compute_teleportation_rate(T,p:float,\
 
     print(f"cache hits: {hits}, solves: {solves}, hit rate: {hits/(hits+solves):.3f}")
 
-    return teleportation_rate,cache
+    return teleportation_rate, cache
 
 
-if __name__ == "__main__":
-    plt.figure()
-    from stabiliser_code import find_logical_op_basis
-    from galois import GF2
-    import codetable_sampler as cs
-    from surface_code import rotated_surface_code
+def tele_rate_plot(gg, num_shots, save=False):
 
-    # Example: [[34,4,10]] over GF(3^2), so q=9 and p=3
-    # html = cs.fetch_codetables_qecc(n=9, k=1)
-
-    # Hx, Hz, H = cs.extract_stabilizer_matrix(html, n=9)
-
-    # print("Hx shape:", Hx.shape)
-    # print("Hz shape:", Hz.shape)
-    # print("H shape :", H.shape)
-    # print("commutes:", cs.check_stabilizer_commutes(Hx, Hz))
-
-    # H = GF2(H)
-
-    # a = find_logical_op_basis(H, 9, CSS=True)
-    # print(a)
-
-    num_shots = 2000
     lost_prob = np.linspace(0,1,21)
-    for i in [3,5,7,9]:
+    for i in [3,5,7]:
         # cha = "hexagonal"
         # cha = "crazy graph"
         # g = hexagonal_lattice(i,i)
-        g = crazy_graph(i,i)
-        g = nx.to_numpy_array(g, dtype = np.uint16)
-        xlogi, zlogi, stabi = create_graph_code(g)
+        # g = crazy_graph(i,i)
+        # g = nx.to_numpy_array(g, dtype = np.uint16)
+        # xlogi, zlogi, stabi = create_graph_code(g)
 
-        _,_,H,xlogi, zlogi = rotated_surface_code(i)
+        # _,_,H,xlogi, zlogi = rotated_surface_code(i)
+        _,_,H,xlogi, zlogi = surface_code(i)
         stabi = GF2(H)
-        _,_,logicals = find_logical_op_basis(stabi, i)
+        _,_,logicals = sc.find_logical_op_basis(stabi, i)
         xlogi=ta.to_gf2_tableau(logicals[0])
         zlogi=ta.to_gf2_tableau(logicals[1])
 
         numq=stabi.shape[1]//2
         print(numq)
-        gg = 5
         previous_meas = []
         # previous_meas = [ta.paulistring2tableau(ele, numq) for ele in previous_meas]
 
@@ -210,6 +194,67 @@ if __name__ == "__main__":
         yerr = np.sqrt(fail_list * (1 - fail_list) / num_shots)
 
         # plt.title(f"Threshold plot for {cha} channel")
+        plt.title(f"Threshold plot for surface code")
+        plt.errorbar(
+            lost_prob,
+            fail_list,
+            yerr=yerr,
+            fmt="o-",
+            label=f"Code is of distance {i}"
+        )
+
+    plt.xlabel("Loss Rate")
+    plt.ylabel("Rate of teleportation")
+    plt.grid()
+    plt.legend()
+
+    if save:
+        plt.savefig(f"plots/surfacecode_threshold_g{gg}_{num_shots}"+".pdf", dpi=800, format="pdf", bbox_inches = 'tight')
+    plt.show()
+
+    return
+
+if __name__ == "__main__":
+    plt.figure()
+
+    # tele_rate_plot(gg=1, num_shots=2000, save=True)
+
+    # # Example: [[34,4,10]] over GF(3^2), so q=9 and p=3
+    # # html = cs.fetch_codetables_qecc(n=9, k=1)
+
+    # # Hx, Hz, H = cs.extract_stabilizer_matrix(html, n=9)
+
+    # # print("Hx shape:", Hx.shape)
+    # # print("Hz shape:", Hz.shape)
+    # # print("H shape :", H.shape)
+    # # print("commutes:", cs.check_stabilizer_commutes(Hx, Hz))
+
+    # # H = GF2(H)
+
+    # # a = sc.d_logical_op_basis(H, 9, CSS=True)
+    # # print(a)
+
+    num_shots = 200
+    lost_prob = np.linspace(0,1,9)
+    for i in [3,5]:
+
+        fail_list = []
+        _,_,H,xlogi, zlogi = surface_code(i)
+        stabi = GF2(H)
+        _,_,logicals = sc.find_logical_op_basis(stabi, i)
+        xlogi=ta.to_gf2_tableau(logicals[0])
+        zlogi=ta.to_gf2_tableau(logicals[1])
+
+        for p in lost_prob:
+            t, ca = compute_teleportation_rate(stabi, p, g=1, max_cache_size=num_shots, num_shots=num_shots)
+
+            fail_list.append(t)
+
+
+        fail_list = np.asarray(fail_list)
+        yerr = np.sqrt(fail_list * (1 - fail_list) / num_shots)
+
+        # plt.title(f"Threshold plot for {cha} channel")
         plt.title(f"Threshold plot for rotated-surface code")
         plt.errorbar(
             lost_prob,
@@ -224,27 +269,5 @@ if __name__ == "__main__":
 
     plt.legend()
     plt.grid()
-    plt.savefig(f"plots/rotated_surfacecode_threshold_5_heu_g{gg}_{num_shots}"+".pdf", dpi=800, format="pdf", bbox_inches = 'tight')
+    # plt.savefig(f"plots/rotated_surfacecode_threshold_5_heu_g{gg}_{num_shots}"+".pdf", dpi=800, format="pdf", bbox_inches = 'tight')
     plt.show()
-
-
-    # g = crazy_graph(4,4)
-    # g = nx.to_numpy_array(g, dtype = np.uint16)
-    # xlogi, zlogi, stabi = create_graph_code(g)
-    # T = GF2(stabi)
-    # numq = T.shape[1]//2
-    # gg = 1
-    # previous_meas = []
-    # previous_meas = [ta.paulistring2tableau(ele, numq) for ele in previous_meas]
-
-    # target = numq - 1          # output qubit O in tableau columns
-
-    # fail_list = np.asarray(fail_list)
-    # yerr = np.sqrt(fail_list * (1 - fail_list) / num_shots)
-
-    # plt.figure()
-    # plt.title("Threshold plot for crazy graph")
-    # plt.errorbar(lost_prob, fail_list, yerr=yerr, fmt="o", label="g-SPF")
-    # plt.plot(lost_prob, fit, label=r"Fit $(1-p^{4})^{4}$")
-    # plt.legend()
-    # plt.show()
