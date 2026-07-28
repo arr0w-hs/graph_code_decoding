@@ -5,7 +5,6 @@ import networkx as nx
 import matplotlib.pyplot as plt
 from galois import GF2
 import tableau as ta
-
 from generalised_spf import generalised_spf_logical, gspf_ilp ,generalised_spf_logical_heuristic
 from spf_graphs import crazy_graph, sample_lost_nodes
 from decoder_methods import create_graph_code
@@ -84,70 +83,6 @@ def sample_lost_masks(num_qubits, p, num_shots = 1, exclude=None, rng=None):
     return lost_masks
 
 
-def compute_teleportation_rate(T, p, target_qubit : int=None, g : int=None,
-                    max_cache_size:int=2000,
-                    method:str='ILP',
-                    num_shots:int=2000):
-    cache = []
-    num_qubits=T.shape[1]//2
-    teleportation_rate = []
-
-    hits = 0
-    solves = 0
-    success = 0
-    lost_mask = sample_lost_masks(num_qubits, p, num_shots, exclude=target_qubit)
-
-    for ele in range(num_shots):
-
-        lq = np.flatnonzero(lost_mask[ele])
-        lost_set = set(int(c) for c in lq)
-
-        # --- cache lookup: any stored pattern that avoids all lost qubits? ---
-        hit = False
-
-        for supp in cache:
-
-            if lost_set.isdisjoint(supp):
-                hit = True
-                break
-
-        if hit:
-            hits += 1
-            success += 1                      # success (a valid pattern survives)
-            continue
-        # -------------------------------------------------------------------
-
-        solves += 1
-        if method=='heuristic':
-            assert g is None, 'for heuristic method g cannot be specified'
-            t1 = time.time()
-            res = generalised_spf_logical_heuristic(T, lq, target_qubit=target_qubit) # this assumes no meas have happend
-        elif method=='ILP':
-            meas=[]
-            res=generalised_spf_logical(T, meas, lq, g, target_qubit=target_qubit)
-
-        else:
-            raise ValueError(f"Method {method} not recognised")
-
-        if res["success"]:
-            success += 1
-
-            # --- cache the found pattern (full-width x, z) ---
-
-            supp = sc.pair_support(res["x"], res["z"], target_qubit)
-            if supp is not None and supp not in cache:
-                cache.append(supp)
-                if len(cache) > max_cache_size:
-                    cache.pop(0)         # FIFO eviction
-            # ------------------------------------------------
-
-    teleportation_rate=success/num_shots
-
-    print(f"cache hits: {hits}, solves: {solves}, hit rate: {hits/(hits+solves):.3f}")
-
-    return teleportation_rate, cache
-
-
 def tele_rate_plot(gg, num_shots, save=False):
 
     lost_prob = np.linspace(0,1,21)
@@ -214,60 +149,152 @@ def tele_rate_plot(gg, num_shots, save=False):
 
     return
 
+
+def compute_teleportation_rate(T, p, target_qubit = None, g = 1,
+                    max_cache_size = 2000,
+                    method = "gspf",
+                    num_shots = 2000,
+                    minimise_support = True):
+
+    cache = []
+    num_qubits=T.shape[1]//2
+    teleportation_rate = []
+
+    hits = 0
+    solves = 0
+    success = 0
+    avg_rt = 0
+    num_runs = 0
+    lost_mask = sample_lost_masks(num_qubits, p, num_shots, exclude=target_qubit)
+
+    for ele in range(num_shots):
+
+        lq = np.flatnonzero(lost_mask[ele])
+        lost_set = set(int(c) for c in lq)
+
+
+        hit = False
+        for supp in cache:
+            if lost_set.isdisjoint(supp):
+                hit = True
+                break
+
+        if hit:
+            hits += 1
+            success += 1                      # success (a valid pattern survives)
+            continue
+
+
+        solves += 1
+        if method == "heuristic":
+            t1 = time.time()
+            res = generalised_spf_logical_heuristic(T, lq, target_qubit=target_qubit) # this assumes no meas have happened
+            rt = (time.time()-t1)
+
+        elif method == "gspf":
+            meas=[]
+            t2 = time.time()
+            res = generalised_spf_logical(T, meas, lq, g, target_qubit=target_qubit, minimise_support=minimise_support)
+            rt = (time.time()-t2)
+
+        elif method == "ilp":
+            meas = []
+            t3 = time.time()
+            T = GF2(T)
+            _,_,logicals = sc.find_logical_op_basis(T, num_qubits)
+            xlogi = ta.to_gf2_tableau(logicals[0])
+            zlogi = ta.to_gf2_tableau(logicals[1])
+            res = gspf_ilp(T, xlogi, zlogi, meas, lq, g, target_qubit=target_qubit, minimise_support=minimise_support)
+            rt = (time.time()-t3)
+        else:
+            raise AssertionError ("wrong method")
+
+        avg_rt += rt
+        if res["success"]:
+            success += 1
+
+            # --- cache the found pattern (full-width x, z) ---
+
+            supp = sc.pair_support(res["x"], res["z"], target_qubit)
+            if supp is not None and supp not in cache:
+                cache.append(supp)
+                if len(cache) > max_cache_size:
+                    cache.pop(0)         # FIFO eviction
+            # ------------------------------------------------
+
+    teleportation_rate=success/num_shots
+    avg_rt /= solves
+
+    print(f"cache hits: {hits}, solves: {solves}, hit rate: {hits/(hits+solves):.3f}")
+
+    return teleportation_rate, cache, avg_rt
+
+
 if __name__ == "__main__":
-    plt.figure()
+    print()
+#     from pathlib import Path
 
-    # tele_rate_plot(gg=1, num_shots=2000, save=True)
+#     plt.figure()
+#     base_dir = Path(__file__).resolve().parent if "__file__" in globals() else Path.cwd()
+#     data_directory = base_dir / "er_results" / f"{date_str}_er"
+#     data_directory.mkdir(parents=True, exist_ok=True)
+#     # tele_rate_plot(gg=1, num_shots=2000, save=True)
 
-    # # Example: [[34,4,10]] over GF(3^2), so q=9 and p=3
-    # # html = cs.fetch_codetables_qecc(n=9, k=1)
+#     # # Example: [[34,4,10]] over GF(3^2), so q=9 and p=3
+#     # # html = cs.fetch_codetables_qecc(n=9, k=1)
 
-    # # Hx, Hz, H = cs.extract_stabilizer_matrix(html, n=9)
+#     # # Hx, Hz, H = cs.extract_stabilizer_matrix(html, n=9)
 
-    # # print("Hx shape:", Hx.shape)
-    # # print("Hz shape:", Hz.shape)
-    # # print("H shape :", H.shape)
-    # # print("commutes:", cs.check_stabilizer_commutes(Hx, Hz))
+#     # # print("Hx shape:", Hx.shape)
+#     # # print("Hz shape:", Hz.shape)
+#     # # print("H shape :", H.shape)
+#     # # print("commutes:", cs.check_stabilizer_commutes(Hx, Hz))
 
-    # # H = GF2(H)
+#     # # H = GF2(H)
 
-    # # a = sc.d_logical_op_basis(H, 9, CSS=True)
-    # # print(a)
+#     # # a = sc.d_logical_op_basis(H, 9, CSS=True)
+#     # # print(a)
 
-    num_shots = 200
-    lost_prob = np.linspace(0,1,9)
-    for i in [3,5]:
+#     num_shots = 2
+#     lost_prob = np.linspace(0,1,9)
+#     for i in [3]:
 
-        fail_list = []
-        _,_,H,xlogi, zlogi = surface_code(i)
-        stabi = GF2(H)
-        _,_,logicals = sc.find_logical_op_basis(stabi, i)
-        xlogi=ta.to_gf2_tableau(logicals[0])
-        zlogi=ta.to_gf2_tableau(logicals[1])
+#         fail_list = []
+#         _,_,H,xlogi, zlogi = surface_code(i)
+#         stabi = GF2(H)
+#         _,_,logicals = sc.find_logical_op_basis(stabi, i)
+#         xlogi=ta.to_gf2_tableau(logicals[0])
+#         zlogi=ta.to_gf2_tableau(logicals[1])
 
-        for p in lost_prob:
-            t, ca = compute_teleportation_rate(stabi, p, g=1, max_cache_size=num_shots, num_shots=num_shots)
+#         for p in lost_prob:
+#             out = compute_teleportation_rate(stabi, p, g=1, max_cache_size=num_shots, num_shots=num_shots)
+#             print(out)
 
-            fail_list.append(t)
+#             output_path = data_directory / f"{time_str}_{n}_output.csv"
+#             with output_path.open("w", newline="", encoding="utf-8") as f:
+#                 writer = csv.writer(f)
+#                 writer.writerow(out_dict.keys())
+#                 writer.writerows(zip(*out_dict.values()))
+#     #         fail_list.append(t)
 
 
-        fail_list = np.asarray(fail_list)
-        yerr = np.sqrt(fail_list * (1 - fail_list) / num_shots)
+#     #     fail_list = np.asarray(fail_list)
+#     #     yerr = np.sqrt(fail_list * (1 - fail_list) / num_shots)
 
-        # plt.title(f"Threshold plot for {cha} channel")
-        plt.title(f"Threshold plot for rotated-surface code")
-        plt.errorbar(
-            lost_prob,
-            fail_list,
-            yerr=yerr,
-            fmt="o-",
-            label=f"Code is {i}x{i}"
-        )
+#     #     # plt.title(f"Threshold plot for {cha} channel")
+#     #     plt.title(f"Threshold plot for rotated-surface code")
+#     #     plt.errorbar(
+#     #         lost_prob,
+#     #         fail_list,
+#     #         yerr=yerr,
+#     #         fmt="o-",
+#     #         label=f"Code is {i}x{i}"
+#     #     )
 
-    plt.xlabel("Loss Rate")
-    plt.ylabel("Rate of teleportation")
+#     # plt.xlabel("Loss Rate")
+#     # plt.ylabel("Rate of teleportation")
 
-    plt.legend()
-    plt.grid()
-    # plt.savefig(f"plots/rotated_surfacecode_threshold_5_heu_g{gg}_{num_shots}"+".pdf", dpi=800, format="pdf", bbox_inches = 'tight')
-    plt.show()
+#     # plt.legend()
+#     # plt.grid()
+#     # # plt.savefig(f"plots/rotated_surfacecode_threshold_5_heu_g{gg}_{num_shots}"+".pdf", dpi=800, format="pdf", bbox_inches = 'tight')
+#     # plt.show()
