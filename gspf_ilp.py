@@ -588,7 +588,6 @@ def generalised_spf_logical(tableau : np.ndarray,
     # measurement constraints X
     for i, meas in enumerate(new_meas):
 
-
         meas_x = meas[:num_qubits_remain]
         meas_z = meas[num_qubits_remain:]
 
@@ -752,7 +751,7 @@ def generalised_spf_logical_heuristic(tableau, lost_qubits: list,
 
     assert np.array_equal(logi_indices, indices), "clean/reduce index mismatch"
 
-    num_stab_remain, m_remain = T_clean.shape #number of remaining stabilisers changes
+    _, m_remain = T_clean.shape #number of remaining stabilisers changes
     num_qubits_remain = m_remain // 2
 
     target_reduced = None
