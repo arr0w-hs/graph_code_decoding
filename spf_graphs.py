@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 from galois import GF2
 import tableau as ta
 
-from gspf_ilp import generalised_spf_logical
+from generalised_spf import generalised_spf_logical
 
 def crazy_graph(width, length, output_node=True):
     graph = nx.Graph()

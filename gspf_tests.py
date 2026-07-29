@@ -102,7 +102,7 @@ def test_gspf(tableau, x_logi, z_logi, measurements, lost_qubits, g=0):
     return
 
 if __name__ == "__main__":
-    from gspf_ilp import create_graph_code
+    from generalised_spf import create_graph_code
 
 
     numq=13
