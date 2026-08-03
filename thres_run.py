@@ -23,7 +23,7 @@ data_directory.mkdir(parents=True, exist_ok=True)
 out = defaultdict(list)
 m = ["Heuristic" ,"g-SPF" ,"ILP"]
 m = ["Heuristic" ,"g-SPF" ,"ILP"]
-m = ['g-SPF']
+m = ['Heuristic']
 code = "sc"
 
 num_shots = 1000
@@ -52,6 +52,7 @@ for i in [3]:
             out["support_size"].append(supp)
             out["teleportation_rate"].append(tele_rate)
             out["method"].append(method)
+            out["min"].appen(ms)
 
             output_path = data_directory / f"{time_str}_{code}_thres_{num_shots}_min_{ms}_{method}.csv"
             with output_path.open("w", newline="", encoding="utf-8") as f:
