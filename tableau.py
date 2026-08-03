@@ -4,6 +4,7 @@ from collections import defaultdict
 import numpy as np
 from galois import GF2
 import galois
+import stabiliser_code as sc
 
 
 
@@ -165,6 +166,52 @@ def sp(a, b): #computes the symplectic product between a and b
     Omega=to_gf2_tableau(construct_Omega_Matrix(num_qubits))
 
     return int(a @ Omega @ b)
+
+def turn_into_symplectic_basis(xz_pair:list,logicals:list): #takes in a list of logicals and turns them into a symplectic basis
+    """xz_pair: tuple of the form (x,z) where x is a representative of the logical x and z is the representative of logical z
+    they must anti-commute
+    logicals: the FULL new normaliser basis, i.e. the normaliser outside of the stabiliser of the whole code
+    
+    Returns: list of pairs of (x_i,z_i) for each logical qubit i. The first entry will be (x,z) with the original xz_pair from the input.
+    The later entries will fulfil: {x_i,z_i}=0 and [x_i,x_j]=[x_i,z_j]=[z_i,z_j]=0"""
+
+
+    num_logical_qubits_remain=(len(logicals))//2
+    X_logical_qubit=xz_pair[0]
+    Z_logical_qubit=xz_pair[1]
+
+    assert sp(Z_logical_qubit,X_logical_qubit)==1; 'Z and X must anti-commute'
+    assert sc.rank_F2(to_gf2_tableau(logicals))==num_logical_qubits_remain*2;'Logicals must be linearly independent'
+
+    if num_logical_qubits_remain>1:
+        additional_logicals=[]
+        #making the additional logicals commute with X and Z
+        for lg in logicals:
+
+            c = to_gf2_tableau(lg).ravel()
+
+
+            if sp(c, Z_logical_qubit) == 1:
+
+                c = c + X_logical_qubit
+
+            if sp(c, X_logical_qubit) == 1:
+
+                c = c + Z_logical_qubit
+
+            if np.asarray(c).any(): #this makes sure to only add c to the additional logicals if it was not
+                #equal to X_logical_qubit or Z_logical_qubit
+                additional_logicals.append(c)
+
+        additional_logicals=to_gf2_tableau(additional_logicals)
+        additional_logicals=additional_logicals.row_reduce()
+
+        additional_logicals = additional_logicals[np.any(additional_logicals, axis=1)]
+
+        additional_logical_pairs = symplectic_basis(additional_logicals)
+
+
+    return [(X_logical_qubit,Z_logical_qubit)]+additional_logical_pairs
 
 def turn_tableau_into_TXZY(T): #robust version
     T = to_gf2_tableau(T)

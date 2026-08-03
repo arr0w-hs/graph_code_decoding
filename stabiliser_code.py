@@ -59,7 +59,7 @@ def lost_indices_to_mask(lost, n_qubits):
 def update_tableau_after_measurements(tableau : GF2, measurements : list):
 
     n = len(measurements[0])//2
-    tableau = GF2(tableau)
+    tableau = ta.to_gf2_tableau(tableau)
 
     tab_copy = tableau.copy()
     for meas in measurements:
@@ -84,7 +84,7 @@ def update_tableau_after_measurements(tableau : GF2, measurements : list):
 
         tab_copy = commuting_stab + anticommuting_stab + [meas.copy()]
 
-    return tab_copy
+    return ta.to_gf2_tableau(tab_copy)
 
 def append_logical_to_tableau(tableau,logical):
 
@@ -162,7 +162,7 @@ def find_ker_minus_rowspace(M, CSS: bool = False):
         Omega = ta.to_gf2_tableau(ta.construct_Omega_Matrix(num_qubits))
         ker = (M @ Omega).null_space()
 
-    row_space = M.row_space()
+    row_space = M.row_space().row_reduce()
     row_space_rank = rank_F2(M)
 
     # grow an independent set on top of the rowspace
@@ -373,7 +373,7 @@ def remove_lost_qubits_from_tableau(T,lost_qubits:list,row_in_T_where_logical_be
     else:
         indices=index_array(num_qubits,[])
 
-    return T_update,destroyed_logicals,indices
+    return T_update.row_reduce(),destroyed_logicals,indices
 
 
 def find_clean_logical(T, logi, lost_qubits,collapse:bool=True):

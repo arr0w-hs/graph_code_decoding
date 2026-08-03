@@ -56,7 +56,7 @@ def gspf_ilp(tableau : np.ndarray, xlogical: list,
 
     """
 
-    T = GF2(tableau)
+    T = ta.to_gf2_tableau(tableau)
 
     num_stab, m = T.shape
     num_qubits = m // 2
@@ -516,40 +516,20 @@ def generalised_spf_logical_heuristic(tableau, lost_qubits: list,
     #in order for the decoder to work this basis must be a symplectic basis
 
     num_logical_qubits_remain=len(reduced_logicals)//2
+    print('number of logical qubits', num_logical_qubits_remain)
 
     X_logical_qubit = ta.to_gf2_tableau(logi_commute_clean).ravel()
     Z_logical_qubit = ta.to_gf2_tableau(logi_anticommute_clean).ravel()
-    additional_logicals = []
+     
+    additional_logicals=[]
 
     if num_logical_qubits_remain>1:
 
         #making the additional logicals commute with X and Z
-        for lg in reduced_logicals:
 
-            c = ta.to_gf2_tableau(lg).ravel()
+        logical_pairs=ta.turn_into_symplectic_basis([X_logical_qubit,Z_logical_qubit],reduced_logicals)
 
-
-            if ta.sp(c, Z_logical_qubit) == 1:
-
-                c = c + X_logical_qubit
-
-            if ta.sp(c, X_logical_qubit) == 1:
-
-                c = c + Z_logical_qubit
-
-            if np.asarray(c).any(): #this makes sure to only add c to the additional logicals if it was not
-                #equal to X_logical_qubit or Z_logical_qubit
-                additional_logicals.append(c)
-        additional_logicals=ta.to_gf2_tableau(additional_logicals)
-        additional_logicals=additional_logicals.row_reduce()
-
-        additional_logicals = additional_logicals[np.any(additional_logicals, axis=1)]
-
-
-        additional_logical_pairs = ta.symplectic_basis(additional_logicals)
-        additional_logicals=[] #now appending to a list
-
-        for (Xa, Za) in additional_logical_pairs:
+        for (Xa, Za) in logical_pairs[1:]:
             additional_logicals.append(ta.to_gf2_tableau(Xa).ravel())
             additional_logicals.append(ta.to_gf2_tableau(Za).ravel())
 
@@ -589,7 +569,8 @@ def generalised_spf_logical_heuristic(tableau, lost_qubits: list,
                 else:
                     channel_probs = dc.make_given_logical_unlikely(channel_probs, num_qubits_remain, short_first)
     else:
-        short_second = dc.find_short_second_logical(T_clean, short_first, max_iter=max_iter)
+        print('finding short_second')
+        short_second = dc.find_short_second_logical_in_coset(T_clean, short_first,Z_logical_qubit,additional_logicals, max_iter=max_iter)
 
     if short_second is None:
         return result
@@ -636,12 +617,12 @@ if __name__ == "__main__":
     stabi=ta.to_gf2_tableau(stabi)
     numq=stabi.shape[1]//2
 
-    previous_meas = ["X4", "X6", "X1*X2", "Z1*Z2"]
+    previous_meas = []
     # previous_meas = []
     previous_meas = [ta.paulistring2tableau(ele, numq) for ele in previous_meas]
     T = ta.to_gf2_tableau(stabi)
     numq=T.shape[1]//2
-    lq=[8,9,5]
+    lq=[8,10,11,9,4,2,5]
     # print('lq',lq)
 
     t1 = time.time()
@@ -673,14 +654,14 @@ if __name__ == "__main__":
         test_gspf(T, xlo, zlo, previous_meas, lq, g=gg)
 
 
-    # t1 = time.time()
-    # res = generalised_spf_logical_heuristic(T, lq, target_qubit=6)
-    # print(time.time()-t1)
-    # if res['success']:
-    #     xlo = res["x"]
-    #     zlo = res["z"]
-    #     print("xlogical output from gspf", ta.tableau2paulistring(xlo))
-    #     print("zlogical output from gspf", ta.tableau2paulistring(zlo))
-    #     test_gspf(T, xlo, zlo, previous_meas, lq, g =gg)
-    # else:
-    #     print('failure')
+    t1 = time.time()
+    res = generalised_spf_logical_heuristic(T, lq)
+    print(time.time()-t1)
+    if res['success']:
+        xlo = res["x"]
+        zlo = res["z"]
+        print("xlogical output from gspf", ta.tableau2paulistring(xlo))
+        print("zlogical output from gspf", ta.tableau2paulistring(zlo))
+        test_gspf(T, xlo, zlo, previous_meas, lq, g =gg)
+    else:
+        print('failure')

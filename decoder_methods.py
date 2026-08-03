@@ -198,10 +198,11 @@ def find_short_first_logical(T,other_logical_repr,CSS:bool=False,max_iter:int=10
     return ta.turn_TXZYerror_into_tableau(result),channel_probs
 
 
-def find_short_second_logical(T,first_logical,CSS:bool=False,\
+def find_short_second_logical_in_coset(T,logi_anti_commute,logi_commute,additional_logicals:list=[],\
                               max_iter:int=100,p_base:float=0.1,p_punish:float=0.01):
 
     #finds second logical with hopefully small overlap
+    #additional_logicals must be a symplectic basis!
 
     if sc.rank_F2(T)<T.shape[0]:
 
@@ -211,13 +212,20 @@ def find_short_second_logical(T,first_logical,CSS:bool=False,\
 
     T=ta.to_gf2_tableau(T)
 
-    if isinstance(first_logical,list):
-        first_logical=sc.tableau_list_to_matrix(first_logical)
+    if isinstance(logi_anti_commute,list):
+        logi_anti_commute=sc.tableau_list_to_matrix(logi_anti_commute)
 
-    if CSS:
-        pass
+    if isinstance(logi_commute,list):
+        logi_commute=sc.tableau_list_to_matrix(logi_commute)
 
-    T=sc.append_logical_to_tableau(T,first_logical)
+    
+    for a in additional_logicals:
+         
+        T=sc.append_logical_to_tableau(T,ta.to_gf2_tableau(a))
+
+    T=sc.append_logical_to_tableau(T,logi_commute)
+    T=sc.append_logical_to_tableau(T,logi_anti_commute)
+ 
     T=ta.turn_tableau_into_TXZY(T)
 
     syndrome = np.zeros(T.shape[0], dtype=int)
@@ -226,26 +234,22 @@ def find_short_second_logical(T,first_logical,CSS:bool=False,\
 
     syndrome_1d = syndrome_1d.astype(np.uint8)
 
+ 
+    channel_probs =create_error_probs_from_logical(n_qubits,logi_anti_commute,p_base=0.1,p_punish=0.01)
 
-    if CSS:
-        pass
-
-    else:
-        
-        channel_probs =create_error_probs_from_logical(n_qubits,first_logical)
-        decoder = BpOsdDecoder(T, channel_probs=channel_probs,
+    decoder = BpOsdDecoder(T, channel_probs=channel_probs,
                                 max_iter=max_iter, bp_method="ms",
                                 osd_method="osd_cs", osd_order=6)
 
-        result = decoder.decode(syndrome_1d)
+    result = decoder.decode(syndrome_1d)
 
-        if result is None or not np.asarray(result).any():
-            return None
+    if result is None or not np.asarray(result).any():
+        return None
 
-        else:
+    else:
 
-            assert np.array_equal((T @ GF2(result)), syndrome_1d), "decoded result does not reproduce the syndrome"
-            assert result.any(), "decoder returned all-zero (no operator found)"
+        assert np.array_equal((T @ GF2(result)), syndrome_1d), "decoded result does not reproduce the syndrome"
+        assert result.any(), "decoder returned all-zero (no operator found)"
 
     result=result.reshape(1, -1)
 
