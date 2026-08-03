@@ -115,7 +115,7 @@ def gspf_ilp(tableau : np.ndarray, xlogical: list,
     if minimise_support:
         for q in range(num_qubits):
             sq = model.NewBoolVar(f"support_{q}")
-            parts = [xlogical_x_part[q], xlogical_z_part[q],zlogical_x_part[q], zlogical_z_part[q]]
+            parts = [xlogical_x_part[q], xlogical_z_part[q], zlogical_x_part[q], zlogical_z_part[q]]
             for p in parts:
                 model.Add(sq >= p)          # any part set -> sq = 1
             model.Add(sq <= sum(parts))     # all parts 0 -> sq = 0
@@ -520,7 +520,7 @@ def generalised_spf_logical_heuristic(tableau, lost_qubits: list,
 
     X_logical_qubit = ta.to_gf2_tableau(logi_commute_clean).ravel()
     Z_logical_qubit = ta.to_gf2_tableau(logi_anticommute_clean).ravel()
-     
+
     additional_logicals=[]
 
     if num_logical_qubits_remain>1:
@@ -602,19 +602,22 @@ def generalised_spf_logical_heuristic(tableau, lost_qubits: list,
 if __name__ == "__main__":
     from gspf_tests import test_gspf
     import time
-    print()
-    numq = 20
-    g = nx.erdos_renyi_graph(numq, 0.57)
-    # g = nx.cycle_graph(numq)
-    g = nx.to_numpy_array(g, dtype = np.uint16)
-
-    xlogiii, zlogiii, stabi = dc.create_graph_code(g)
-    print("xlogical input", ta.tableau2paulistring(xlogiii))
-    print("zlogical input", ta.tableau2paulistring(zlogiii))
+    from code_importer import rotated_surface_code, surface_code
+    # numq = 20
+    # g = nx.erdos_renyi_graph(numq, 0.57)
+    # # g = nx.cycle_graph(numq)
+    # g = nx.to_numpy_array(g, dtype = np.uint16)
+    # xlogiii, zlogiii, stabi = dc.create_graph_code(g)
+    # print("xlogical input", ta.tableau2paulistring(xlogiii))
+    # print("zlogical input", ta.tableau2paulistring(zlogiii))
 
     gg = 1
 
-    stabi=ta.to_gf2_tableau(stabi)
+
+    _,_,H,xlogi, zlogi = surface_code(5)
+    # stabi = GF2(H)
+
+    stabi=ta.to_gf2_tableau(H)
     numq=stabi.shape[1]//2
 
     previous_meas = []
@@ -622,11 +625,11 @@ if __name__ == "__main__":
     previous_meas = [ta.paulistring2tableau(ele, numq) for ele in previous_meas]
     T = ta.to_gf2_tableau(stabi)
     numq=T.shape[1]//2
-    lq=[8,10,11,9,4,2,5]
+    lq=[4,3,1]
     # print('lq',lq)
 
     t1 = time.time()
-    res =  generalised_spf_logical(T,previous_meas, lq, gg, target_qubit=7, minimise_support=False)
+    res =  generalised_spf_logical(T,previous_meas, lq, gg, target_qubit=None, minimise_support=True)
     print(time.time()-t1)
 
     # res = generalised_spf_logical(stabi, xlogiii, zlogi, previous_meas, lq, gg, target_qubit=None)
@@ -638,20 +641,22 @@ if __name__ == "__main__":
         print("support_size", sum(res["support_size"]))
         print("xlogical output from gspf", ta.tableau2paulistring(xlo))
         print("zlogical output from gspf", ta.tableau2paulistring(zlo))
-        test_gspf(T, xlo, zlo, previous_meas, lq, g=gg)
+        # test_gspf(T, xlo, zlo, previous_meas, lq, g=gg)
+        supp = sc.pair_support(res["x"], res["z"], None)
+        print(len(supp))
 
     print("\n ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n")
-    t1 = time.time()
-    res =  gspf_ilp(T,xlogiii, zlogiii, previous_meas, lq, gg, target_qubit=7, minimise_support=False)
-    print(time.time()-t1)
-    print("success old: ",res['success'])
-    if res['success']:
-        xlo = res["x"]
-        zlo = res["z"]
-        print("support_size", sum(res["support_size"]))
-        print("xlogical output from gspf", ta.tableau2paulistring(xlo))
-        print("zlogical output from gspf", ta.tableau2paulistring(zlo))
-        test_gspf(T, xlo, zlo, previous_meas, lq, g=gg)
+    # t1 = time.time()
+    # res =  gspf_ilp(T,xlogi, zlogi, previous_meas, lq, gg, target_qubit=7, minimise_support=False)
+    # print(time.time()-t1)
+    # print("success old: ",res['success'])
+    # if res['success']:
+    #     xlo = res["x"]
+    #     zlo = res["z"]
+    #     print("support_size", sum(res["support_size"]))
+    #     print("xlogical output from gspf", ta.tableau2paulistring(xlo))
+    #     print("zlogical output from gspf", ta.tableau2paulistring(zlo))
+    #     test_gspf(T, xlo, zlo, previous_meas, lq, g=gg)
 
 
     t1 = time.time()
@@ -660,8 +665,10 @@ if __name__ == "__main__":
     if res['success']:
         xlo = res["x"]
         zlo = res["z"]
-        print("xlogical output from gspf", ta.tableau2paulistring(xlo))
-        print("zlogical output from gspf", ta.tableau2paulistring(zlo))
+        print("xlogical output from Heuristic", ta.tableau2paulistring(xlo))
+        print("zlogical output from Heuristic", ta.tableau2paulistring(zlo))
         test_gspf(T, xlo, zlo, previous_meas, lq, g =gg)
+        supp = sc.pair_support(res["x"], res["z"], None)
+        print(f"support = {len(supp)}")
     else:
         print('failure')

@@ -21,13 +21,15 @@ data_directory.mkdir(parents=True, exist_ok=True)
 
 
 out = defaultdict(list)
-m = ["heuristic" ,"gspf" ,"ilp"]
+m = ["Heuristic" ,"g-SPF" ,"ILP"]
+m = ["Heuristic" ,"g-SPF" ,"ILP"]
+m = ['g-SPF']
 code = "sc"
 
-num_shots = 20
+num_shots = 1000
 lost_prob = np.linspace(0,1,21)
-
-for i in [3,5]:
+ms = False
+for i in [3]:
 
     fail_list = []
     _,_,H,xlogi, zlogi = surface_code(i)
@@ -40,15 +42,18 @@ for i in [3,5]:
 
 
         for p in lost_prob:
-            tele_rate, _, rt = compute_teleportation_rate(stabi, p, g=1, method = method, max_cache_size=num_shots, num_shots=num_shots)
+            tele_rate, _, rt, supp = compute_teleportation_rate(stabi, p, g=1, method = method,
+                                                        max_cache_size=num_shots, num_shots=num_shots,
+                                                        minimise_support=ms)
 
             out["loss_prob"].append(p)
             out["distance"].append(i)
             out["runtime"].append(rt)
+            out["support_size"].append(supp)
             out["teleportation_rate"].append(tele_rate)
             out["method"].append(method)
 
-            output_path = data_directory / f"{time_str}_{code}_thres.csv"
+            output_path = data_directory / f"{time_str}_{code}_thres_{num_shots}_min_{ms}_{method}.csv"
             with output_path.open("w", newline="", encoding="utf-8") as f:
                 writer = csv.writer(f)
                 writer.writerow(out.keys())

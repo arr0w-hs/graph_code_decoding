@@ -159,7 +159,7 @@ def compute_teleportation_rate(T, p, target_qubit = None, g = 1,
     cache = []
     num_qubits=T.shape[1]//2
     teleportation_rate = []
-
+    support_list = []
     hits = 0
     solves = 0
     success = 0
@@ -186,18 +186,18 @@ def compute_teleportation_rate(T, p, target_qubit = None, g = 1,
 
 
         solves += 1
-        if method == "heuristic":
+        if method == "Heuristic":
             t1 = time.time()
             res = generalised_spf_logical_heuristic(T, lq, target_qubit=target_qubit) # this assumes no meas have happened
             rt = (time.time()-t1)
 
-        elif method == "gspf":
+        elif method == "g-SPF":
             meas=[]
             t2 = time.time()
             res = generalised_spf_logical(T, meas, lq, g, target_qubit=target_qubit, minimise_support=minimise_support)
             rt = (time.time()-t2)
 
-        elif method == "ilp":
+        elif method == "ILP":
             meas = []
             t3 = time.time()
             T = GF2(T)
@@ -216,6 +216,8 @@ def compute_teleportation_rate(T, p, target_qubit = None, g = 1,
             # --- cache the found pattern (full-width x, z) ---
 
             supp = sc.pair_support(res["x"], res["z"], target_qubit)
+            support_list.append(len(supp))
+
             if supp is not None and supp not in cache:
                 cache.append(supp)
                 if len(cache) > max_cache_size:
@@ -225,9 +227,13 @@ def compute_teleportation_rate(T, p, target_qubit = None, g = 1,
     teleportation_rate=success/num_shots
     avg_rt /= solves
 
-    print(f"cache hits: {hits}, solves: {solves}, hit rate: {hits/(hits+solves):.3f}")
+    if len(support_list) == 0:
+        avg_supp = 0
+    else:
+        avg_supp = np.mean(support_list)
+    # print(f"cache hits: {hits}, solves: {solves}, hit rate: {hits/(hits+solves):.3f}")
 
-    return teleportation_rate, cache, avg_rt
+    return teleportation_rate, cache, avg_rt, avg_supp
 
 
 if __name__ == "__main__":
