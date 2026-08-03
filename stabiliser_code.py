@@ -292,15 +292,15 @@ def make_T_solve_anti_commuting_logi_at_O(T,first_logi,o:int):
 
     return T,syndrome
 
-def find_anti_commuting_logi_at_O(T,first_logi,accidental_logicals,o): #TODO: currently only works for one logical qubit
+def find_anti_commuting_logi_at_O(T,logi_anti_commute,logi_commute_list:list,o): #TODO: currently only works for one logical qubit
 
     num_qubits=T.shape[1]//2
 
 
-    for l in accidental_logicals:
+    for l in logi_commute_list:
         T=append_logical_to_tableau(T,l) #make second logical commute with all accidental logical so we are not in that coset
-
-    T_solve,syndrome=make_T_solve_anti_commuting_logi_at_O(T,first_logi,o)
+    
+    T_solve,syndrome=make_T_solve_anti_commuting_logi_at_O(T,logi_anti_commute,o)
     T_solve = T_solve@GF2(ta.construct_Omega_Matrix(num_qubits).astype(np.int64))
     v = solve_gf2(T_solve, syndrome)
     if v is None:

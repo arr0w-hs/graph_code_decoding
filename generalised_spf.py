@@ -551,7 +551,7 @@ def generalised_spf_logical_heuristic(tableau, lost_qubits: list,
     with probabiltiies that make the previously found logical unlikely."""
 
     if target_reduced is not None:
-        short_second = sc.find_anti_commuting_logi_at_O(T_clean, short_first,additional_logicals, target_reduced)
+        short_second = sc.find_anti_commuting_logi_at_O(T_clean, short_first,additional_logicals+[logi_commute_clean], target_reduced)
         if short_second is None:
             channel_probs = dc.make_given_logical_unlikely(channel_probs, num_qubits_remain, short_first)
             for i in range(anti_commut_iter):
@@ -563,7 +563,7 @@ def generalised_spf_logical_heuristic(tableau, lost_qubits: list,
                     short_second = None
                     break
 
-                short_second = sc.find_anti_commuting_logi_at_O(T_clean, short_first,additional_logicals, target_reduced)
+                short_second = sc.find_anti_commuting_logi_at_O(T_clean, short_first,additional_logicals+[logi_commute_clean], target_reduced)
                 if short_second is not None:
                     break
                 else:
