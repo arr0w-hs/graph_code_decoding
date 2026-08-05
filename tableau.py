@@ -28,7 +28,7 @@ def _row2paulistring(row,indices:None):
     return "*".join(terms) if terms else "I"
 
 
-def tableau2paulistring(in_stab,indices:list=None):
+def tableau2paulistring(in_stab, indices:list=None):
     """
     Convert an X|Z stabilizer tableau to Stim-style Pauli strings.
 
@@ -36,16 +36,19 @@ def tableau2paulistring(in_stab,indices:list=None):
               (k, 2n) array -> returns a list of k strings
     Column layout assumed: [x_0 ... x_{n-1} | z_0 ... z_{n-1}].
     """
-    
-    arr = np.asarray(in_stab, dtype=bool)
+    if in_stab is not None:
 
-    if arr.ndim == 1:
-        return _row2paulistring(arr,indices=indices)
+        arr = np.asarray(in_stab, dtype=bool)
 
-    if arr.ndim == 2:
-        return [_row2paulistring(row,indices=indices) for row in arr]
+        if arr.ndim == 1:
+            return _row2paulistring(arr,indices=indices)
 
-    raise ValueError(f"expected 1D or 2D array, got ndim={arr.ndim}")
+        if arr.ndim == 2:
+            return [_row2paulistring(row,indices=indices) for row in arr]
+        raise ValueError(f"expected 1D or 2D array, got ndim={arr.ndim}")
+    else:
+        return None
+
 
 def tableau_list_to_matrix(tableau:list[list]):
 
@@ -158,11 +161,11 @@ def sp(a, b): #computes the symplectic product between a and b
 
     a=to_gf2_tableau(a).ravel() #make 1-D TODO: check generally how shapes of arrays are changing
     b=to_gf2_tableau(b).ravel()
-    
+
     num_qubits=len(a)//2
 
     assert len(b)//2==num_qubits,'a and b shape inconsistent'
- 
+
     Omega=to_gf2_tableau(construct_Omega_Matrix(num_qubits))
 
     return int(a @ Omega @ b)
@@ -171,7 +174,7 @@ def turn_into_symplectic_basis(xz_pair:list,logicals:list): #takes in a list of 
     """xz_pair: tuple of the form (x,z) where x is a representative of the logical x and z is the representative of logical z
     they must anti-commute
     logicals: the FULL new normaliser basis, i.e. the normaliser outside of the stabiliser of the whole code
-    
+
     Returns: list of pairs of (x_i,z_i) for each logical qubit i. The first entry will be (x,z) with the original xz_pair from the input.
     The later entries will fulfil: {x_i,z_i}=0 and [x_i,x_j]=[x_i,z_j]=[z_i,z_j]=0"""
 

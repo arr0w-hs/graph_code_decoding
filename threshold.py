@@ -16,6 +16,7 @@ from code_importer import rotated_surface_code, surface_code
 
 from multiprocessing import Pool, cpu_count
 from joblib import Parallel, delayed
+from collections import defaultdict
 plt.rcParams.update({'font.size': 14})
 
 
@@ -104,8 +105,6 @@ def tele_rate_plot(gg, num_shots, save=False):
         numq=stabi.shape[1]//2
         print(numq)
         previous_meas = []
-        # previous_meas = [ta.paulistring2tableau(ele, numq) for ele in previous_meas]
-
 
         fail_list = []
         fit = []
@@ -150,7 +149,7 @@ def tele_rate_plot(gg, num_shots, save=False):
     return
 
 
-def compute_teleportation_rate(T, p, target_qubit = None, g = 1,
+def compute_teleportation_rate_old(T, p, target_qubit = None, g = 1,
                     max_cache_size = 2000,
                     method = "gspf",
                     num_shots = 2000,
@@ -228,12 +227,13 @@ def compute_teleportation_rate(T, p, target_qubit = None, g = 1,
     avg_rt /= solves
 
     if len(support_list) == 0:
-        avg_supp = 0
+        avg_supp = "Nan"
     else:
         avg_supp = np.mean(support_list)
     # print(f"cache hits: {hits}, solves: {solves}, hit rate: {hits/(hits+solves):.3f}")
 
     return teleportation_rate, cache, avg_rt, avg_supp
+
 
 
 if __name__ == "__main__":

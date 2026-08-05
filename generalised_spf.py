@@ -1,5 +1,6 @@
 import os
 import numpy as np
+import time
 from galois import GF2
 import tableau as ta
 import stabiliser_code as sc
@@ -299,7 +300,7 @@ def update_T_and_logi_after_loss(T : np.ndarray, logicals : list, lost_qubits : 
 
 
     T = ta.to_gf2_tableau(T)
-    T, _, indices = sc.remove_lost_qubits_from_tableau(T, lost_qubits) #indices to remember which qubits removed
+    T, _, indices = sc.remove_lost_qubits_from_tableau(T, lost_qubits, reduce = False) #indices to remember which qubits removed
     num_stab_remain, m_remain = T.shape
     xlogical_reduced = ta.to_gf2_tableau(np.asarray(logicals[0]).ravel())
     zlogical_reduced = ta.to_gf2_tableau(np.asarray(logicals[1]).ravel())
@@ -391,6 +392,7 @@ def generalised_spf_logical(tableau : np.ndarray,
     A loss-tolerant representation of the 'logical' satisfying g-SPF.
 
     """
+    t1 = time.time()
     result = {
             "success": False,
             "status": None,
@@ -413,7 +415,7 @@ def generalised_spf_logical(tableau : np.ndarray,
     #remove lost qubits, keep indices
     _, m = T.shape
     num_qubits = m // 2
-
+    early_flag = True
     assert m % 2 == 0, "Tableau length must be even"
     assert all(0 <= x <= num_qubits-1 for x in lost_qubits), f"Lost qubits can only contain qubits indices from 0 to {num_qubits-1}"
     assert g >= 1, "g must be at least 1"
@@ -423,12 +425,12 @@ def generalised_spf_logical(tableau : np.ndarray,
     res_update = update_T_and_logi_after_loss(T, [xlogical, zlogical], lost_qubits)
     T_reduced, xlogical_reduced, zlogical_reduced, indices, success = res_update
     if not success: # no clean logi exists, information destroyed
-        return result
+        return result, early_flag, time.time() - t1
 
     target_reduced = update_target_after_losses(target_qubit, indices, num_qubits)
     if target_reduced is False:
         print("target qubit lost")
-        return result
+        return result, early_flag, time.time() - t1
 
     meas_reduced = update_measurements_after_losses(measurements, lost_qubits, m)
 
@@ -448,7 +450,7 @@ def generalised_spf_logical(tableau : np.ndarray,
         result['x'] = x
         result['z'] = z
 
-    return result
+    return result, False, None
 
 
 def generalised_spf_logical_heuristic(tableau, lost_qubits: list,
@@ -516,7 +518,7 @@ def generalised_spf_logical_heuristic(tableau, lost_qubits: list,
     #in order for the decoder to work this basis must be a symplectic basis
 
     num_logical_qubits_remain=len(reduced_logicals)//2
-    print('number of logical qubits', num_logical_qubits_remain)
+    # print('number of logical qubits', num_logical_qubits_remain)
 
     X_logical_qubit = ta.to_gf2_tableau(logi_commute_clean).ravel()
     Z_logical_qubit = ta.to_gf2_tableau(logi_anticommute_clean).ravel()
@@ -569,7 +571,7 @@ def generalised_spf_logical_heuristic(tableau, lost_qubits: list,
                 else:
                     channel_probs = dc.make_given_logical_unlikely(channel_probs, num_qubits_remain, short_first)
     else:
-        print('finding short_second')
+        # print('finding short_second')
         short_second = dc.find_short_second_logical_in_coset(T_clean, short_first,Z_logical_qubit,additional_logicals, max_iter=max_iter)
 
     if short_second is None:

@@ -299,7 +299,7 @@ def find_anti_commuting_logi_at_O(T,logi_anti_commute,logi_commute_list:list,o):
 
     for l in logi_commute_list:
         T=append_logical_to_tableau(T,l) #make second logical commute with all accidental logical so we are not in that coset
-    
+
     T_solve,syndrome=make_T_solve_anti_commuting_logi_at_O(T,logi_anti_commute,o)
     T_solve = T_solve@GF2(ta.construct_Omega_Matrix(num_qubits).astype(np.int64))
     v = solve_gf2(T_solve, syndrome)
@@ -307,9 +307,12 @@ def find_anti_commuting_logi_at_O(T,logi_anti_commute,logi_commute_list:list,o):
         return None                          # no such logical exists
     return v
 
-def pair_support(x, z, target_qubit):
+def pair_support(x, z, target_qubit, size):
 
-
+    if x is None or z is None:
+        if size:
+            return 'Nan'
+        return None
     #counts the joint support of x and z
     x = np.asarray(x).ravel().astype(int)
     z = np.asarray(z).ravel().astype(int)
@@ -321,7 +324,11 @@ def pair_support(x, z, target_qubit):
         if x[q] or x[q+num_qubits] or z[q] or z[q+num_qubits]:
             supp.add(q)
     if len(supp) == 0:
+        if size:
+            return "Nan"
         return None          # supported only at O — valid success, not a cacheable pattern
+    if size:
+        return len(supp)
     return frozenset(supp)
 
 
@@ -337,7 +344,7 @@ def index_array(n:int, lost:list):
     return keep
 
 def remove_lost_qubits_from_tableau(T,lost_qubits:list,row_in_T_where_logical_begins:int=None,CSS:bool=False,\
-                                    collapse:bool=True):
+                                    collapse:bool=True, reduce = True):
     #TODO: implement for CSS
     #can also remove lost qubits from tableau when the tableau includes the logical operators of the code
     #they first rows up to row row_in_T_where_logical_begins must be stabilisers. Returns the same order
@@ -372,8 +379,10 @@ def remove_lost_qubits_from_tableau(T,lost_qubits:list,row_in_T_where_logical_be
         T_update=kick_out_qubits(T_update,lost_qubits)
     else:
         indices=index_array(num_qubits,[])
-
-    return T_update.row_reduce(),destroyed_logicals,indices
+    if reduce:
+        return T_update.row_reduce(), destroyed_logicals, indices
+    else:
+        return T_update, destroyed_logicals, indices
 
 
 def find_clean_logical(T, logi, lost_qubits,collapse:bool=True):
