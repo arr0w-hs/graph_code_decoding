@@ -307,12 +307,13 @@ def find_anti_commuting_logi_at_O(T,logi_anti_commute,logi_commute_list:list,o):
         return None                          # no such logical exists
     return v
 
-def pair_support(x, z, target_qubit, size):
+def pair_support(x, z, target_qubit, size:bool):
 
     if x is None or z is None:
         if size:
-            return 'Nan'
+            return 'Nan' #why can't we just return None?
         return None
+    
     #counts the joint support of x and z
     x = np.asarray(x).ravel().astype(int)
     z = np.asarray(z).ravel().astype(int)
@@ -323,12 +324,14 @@ def pair_support(x, z, target_qubit, size):
             continue
         if x[q] or x[q+num_qubits] or z[q] or z[q+num_qubits]:
             supp.add(q)
+
     if len(supp) == 0:
         if size:
             return "Nan"
         return None          # supported only at O — valid success, not a cacheable pattern
     if size:
         return len(supp)
+    
     return frozenset(supp)
 
 

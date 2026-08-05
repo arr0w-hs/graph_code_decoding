@@ -237,7 +237,6 @@ def turn_TXZY_into_tableau(T):
 
     T=to_gf2_tableau(T)
 
-
     num_qubits=T.shape[1]//3
 
     Zblock=T[:,:num_qubits]
@@ -249,6 +248,7 @@ def turn_TXZY_into_tableau(T):
     return T_new
 
 def turn_TXZYerror_into_tableau(T):
+
     T = to_gf2_tableau(T)
     num_qubits = T.shape[1] // 3
 
@@ -260,6 +260,29 @@ def turn_TXZYerror_into_tableau(T):
     Zblock = a + c
 
     return np.hstack((Xblock, Zblock))
+
+def turn_tableau_into_TXZYerror(T): #robust version, inverse of turn_TXZYerror_into_tableau
+    T = to_gf2_tableau(T)
+
+    if T.ndim == 1:
+        num_qubits = T.shape[0] // 2
+        x_part = np.asarray(T[:num_qubits]).astype(bool)
+        z_part = np.asarray(T[num_qubits:]).astype(bool)
+        a = z_part & ~x_part   # pure Z -> Z-error block
+        b = x_part & ~z_part   # pure X -> X-error block
+        c = x_part & z_part    # Y      -> Y-error block
+        return to_gf2_tableau(np.concatenate([a, b, c]).astype(np.int64))
+
+    if T.ndim == 2:
+        num_qubits = T.shape[1] // 2
+        x_part = np.asarray(T[:, :num_qubits]).astype(bool)
+        z_part = np.asarray(T[:, num_qubits:]).astype(bool)
+        a = z_part & ~x_part
+        b = x_part & ~z_part
+        c = x_part & z_part
+        return to_gf2_tableau(np.hstack([a, b, c]).astype(np.int64))
+
+    raise ValueError(f"expected 1D or 2D tableau, got ndim={T.ndim}")
 
 
 def er_depol_channel(error_prob, log):
