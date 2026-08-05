@@ -569,7 +569,7 @@ def generalised_spf_logical_heuristic(tableau, lost_qubits: list,
                 else:
                     channel_probs = dc.make_given_logical_unlikely(channel_probs, num_qubits_remain, short_first)
     else:
-        print('finding short_second')
+        
         short_second = dc.find_short_second_logical_in_coset(T_clean, short_first,Z_logical_qubit,additional_logicals, max_iter=max_iter)
 
     if short_second is None:
