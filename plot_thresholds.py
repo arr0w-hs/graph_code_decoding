@@ -38,6 +38,7 @@ dr = os.path.join(dr, "threshold_folder")
 
 a = "minimise"
 a = "no_min"
+a = "2026-08-03"
 dir_name = os.path.join(dr, a)
 
 #  filees = ["114507_sc_thres_2000.csv"]
@@ -173,11 +174,11 @@ fig.subplots_adjust(right=0.72)
 
 fig.tight_layout()
 
-fig.savefig(
-    os.path.join(dr, f"{a}_runtime.pdf"),
-    dpi=800,
-    bbox_inches="tight",
-)
+# fig.savefig(
+#     os.path.join(dr, f"{a}_runtime.pdf"),
+#     dpi=800,
+#     bbox_inches="tight",
+# )
 # plt.show()
 
 
@@ -204,11 +205,11 @@ linestyle_map = {
 }
 
 filter_df = out_df1[out_df1["support_size"] != 0]
-filter_df = (
-    filter_df.groupby(["method", "loss_prob", "distance"], as_index=False)
-    [["runtime", "support_size", "teleportation_rate"]]
-    .mean()
-)
+# filter_df = (
+#     filter_df.groupby(["method", "loss_prob", "distance"], as_index=False)
+#     [["runtime", "support_size", "teleportation_rate"]]
+#     .mean()
+# )
 
 for distance, distance_df in filter_df.groupby("distance"):
     for method, method_df in distance_df.groupby("method"):
@@ -299,11 +300,11 @@ fig.subplots_adjust(right=0.72)
 
 fig.tight_layout()
 
-fig.savefig(
-    os.path.join(dr, f"{a}_support.pdf"),
-    dpi=800,
-    bbox_inches="tight",
-)
+# fig.savefig(
+#     os.path.join(dr, f"{a}_support.pdf"),
+#     dpi=800,
+#     bbox_inches="tight",
+# )
 
 
 num_shots = 1000
@@ -348,11 +349,11 @@ for method, method_df in out_df.groupby("method"):
 
     fig.tight_layout()
 
-    fig.savefig(
-        os.path.join(dr, f"{a}_Threshold_{method}.pdf"),
-        dpi=800,
-        bbox_inches="tight",
-    )
+    # fig.savefig(
+    #     os.path.join(dr, f"{a}_Threshold_{method}.pdf"),
+    #     dpi=800,
+    #     bbox_inches="tight",
+    # )
 
 
-# plt.show()
+plt.show()
