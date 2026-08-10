@@ -137,12 +137,12 @@ def y_positions(v):
     return y_mask
 
 
-def rank_F2(M):
+def rank_F2(row_space):
 
-    if not isinstance(M, galois.GF2):
-        M=GF2(M)
+    """if not isinstance(M, galois.GF2):
+        M=GF2(M)"""
 
-    row_space=M.row_space()
+    #row_space=M.row_space()
     rref = row_space.row_reduce()
     row_space_rank = int(np.any(rref, axis=1).sum())
 
@@ -162,8 +162,8 @@ def find_ker_minus_rowspace(M, CSS: bool = False):
         Omega = ta.to_gf2_tableau(ta.construct_Omega_Matrix(num_qubits))
         ker = (M @ Omega).null_space()
 
-    row_space = M.row_space().row_reduce()
-    row_space_rank = rank_F2(M)
+    row_space = M.row_space() #row reduction is done in rank_F2
+    row_space_rank = rank_F2(row_space) #rank_F2 now takes row space, so nothing is double computed
 
     # grow an independent set on top of the rowspace
     basis = GF2(np.array(row_space))          # start from the stabiliser rowspace
@@ -307,7 +307,9 @@ def find_anti_commuting_logi_at_O(T,logi_anti_commute,logi_commute_list:list,o):
         return None                          # no such logical exists
     return v
 
-def pair_support(x, z, target_qubit, size:bool):
+def pair_support(x, z, target_qubit:int, size:bool):
+    """Returns the size of the support (an integer) if size is set to True, otherwise it returns the support index set
+    target_qubit can be set to None, then it is not excluded"""
 
     if x is None or z is None:
         if size:
@@ -320,6 +322,7 @@ def pair_support(x, z, target_qubit, size:bool):
     supp = set()
     num_qubits = len(x)//2
     for q in range(num_qubits):
+
         if q == target_qubit:
             continue
         if x[q] or x[q+num_qubits] or z[q] or z[q+num_qubits]:

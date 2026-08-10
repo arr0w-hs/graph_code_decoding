@@ -249,7 +249,7 @@ def find_short_second_logical_in_coset(T,logi_anti_commute,logi_commute,addition
     syndrome_1d = syndrome_1d.astype(np.uint8)
 
  
-    channel_probs =create_error_probs_from_logical(n_qubits,logi_anti_commute,p_base=0.1,p_punish=0.01)
+    channel_probs =create_error_probs_from_logical(n_qubits,logi_anti_commute,p_base=0.1,p_punish=1e-4)
 
     decoder = BpOsdDecoder(T, channel_probs=channel_probs,
                                 max_iter=max_iter, bp_method="ms",

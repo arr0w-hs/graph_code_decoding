@@ -221,7 +221,7 @@ def gspf_ilp(tableau : np.ndarray, xlogical: list,
 
     solver = cp_model.CpSolver()
     solver.parameters.max_time_in_seconds = max_time
-    solver.parameters.num_search_workers = min(8, os.cpu_count() or 1)
+    #solver.parameters.num_search_workers = min(8, os.cpu_count() or 1)
 
     status = solver.Solve(model)
 
@@ -458,11 +458,11 @@ def generalised_spf_logical(tableau : np.ndarray,
     return result, False, None
 
 
-def generalised_spf_logical_heuristic(tableau, lost_qubits: list,
-                    target_qubit: int = None, anti_commut_iter: int = 10,
+def generalised_spf_logical_heuristic(tableau, lost_qubits: list,g:int,
+                    target_qubit: int = None,anti_commut_iter: int = 10,
                     correct_for_lost_indices: bool = True,
                     max_iter: int = 100,row_reduce:bool=False):
-    print('calling heuristic')
+    
     result = {
         "success": False,
         "status": None,
@@ -494,7 +494,7 @@ def generalised_spf_logical_heuristic(tableau, lost_qubits: list,
         f"Expected one logical qubit, got {len(logical_ops)//2}"
   
     T_clean, logi_commute_clean, logi_anticommute_clean, indices, success=update_T_and_logi_after_loss(T,logical_ops,lost_qubits,reduce=row_reduce)
-    print('cleaning success',success)
+    
     if not success:
         print('could not clean logical')
         return result
@@ -574,11 +574,19 @@ def generalised_spf_logical_heuristic(tableau, lost_qubits: list,
         Z_short_second = dc.find_short_second_logical_in_coset(T_clean, X_short_first,Z_logical_qubit,additional_logicals, max_iter=max_iter)
 
     if Z_short_second is None:
+        print('could not find Z_short second')
         return result
 
 
     X_short_first = ta.to_gf2_tableau(X_short_first).ravel()
     Z_short_second = ta.to_gf2_tableau(Z_short_second).ravel()
+ 
+
+    anti_commute_size=ta.qubit_wise_commutation(X_short_first,Z_short_second)
+ 
+    if len(anti_commute_size)>g:
+        
+        return result
 
 
     if correct_for_lost_indices:
@@ -629,7 +637,7 @@ if __name__ == "__main__":
     previous_meas = [ta.paulistring2tableau(ele, numq) for ele in previous_meas]
     T = ta.to_gf2_tableau(stabi)
     numq=T.shape[1]//2
-    lq=[4,3,1,2,5,6,7,8]
+    lq=[4,3,5,6]
     # print('lq',lq)
 
     target_qubit=24
@@ -665,7 +673,7 @@ if __name__ == "__main__":
 
 
     t1 = time.time()
-    res = generalised_spf_logical_heuristic(T, lq,target_qubit=target_qubit)
+    res = generalised_spf_logical_heuristic(T, lq,2,target_qubit=None)
     print(time.time()-t1)
     if res['success']:
         xlo = res["x"]
