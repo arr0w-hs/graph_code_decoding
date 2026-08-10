@@ -1,20 +1,6 @@
 """
-Benchmark g-SPF (ILP) against the g-SPF heuristic on *crazy-graph* codes,
-swept over code size.
-
-crazy_graph is the densest of the supplied graph builders: every node in a
-layer connects to every node in the next layer. That produces high-weight
-stabilisers and large-support logicals, which is the regime where the ILP's
-minimum-support optimality proof is most expensive, while the heuristic's
-find-a-short-logical cost stays polynomial. So it is the family chosen to
-expose the runtime gap without scaling the qubit count very far.
-
-For each size (a crazy_graph width x length) this builds the code via
-create_graph_code, draws N_TRIALS random loss patterns at a fixed loss
-probability, runs both solvers on each pattern, and times them. It keeps the
-runs that reported success, averages run times per method per size, and plots
-average successful runtime against the qubit count on a log y-axis so the
-scaling divergence is visible.
+Benchmark g-SPF (ILP) against the g-SPF heuristic on graph codes, swept over
+code size and loss probability. See FAMILY / SIZES / PROBS in the config block.
 
 Edit the imports if module names differ:
   - solvers come from `generalised_spf`
@@ -49,7 +35,7 @@ import generalised_spf as _gspf_mod
 #   "crazy_graph", "square_lattice", "hexagonal_lattice",
 #   "triangular_lattice", "tree_to_tree_graph", "random_graph",
 #   "surface_code" (special-cased: not a graph code).
-FAMILY = "surface_code"
+FAMILY = "triangular_lattice"
 # Each SIZES entry is the pair of size parameters for the chosen family:
 # (width, length) for the lattice families, (branches, depth) for
 # tree_to_tree_graph, (num_nodes, edge_prob) for random_graph, (L, _) for
@@ -58,20 +44,22 @@ FAMILY = "surface_code"
 #   SIZES = [(8, 0.5), (11, 0.5), (14, 0.5), (18, 0.5), (22, 0.5), (26, 0.5)]
 #   e.g. for surface_code:  SIZES = [(3, 0), (5, 0), (7, 0), (9, 0)]
 #SIZES = [(2, 2), (2, 3), (3, 3), (3, 4), (4, 4), (4, 5), (5, 5)]
-SIZES=SIZES = [(3, 0), (5, 0), (7, 0), (9, 0)]
-N_TRIALS       = 15      # random loss patterns per (size, p) cell
+#SIZES=SIZES = [(3, 0), (5, 0), (7, 0)]
+SIZES = [(3,3),(4,4),(5,5),(6,6),(7,7)]
+#SIZES = [(2, 2),  (3, 3), (4, 4),  (5, 5),(6,6)]
+N_TRIALS       = 50     # random loss patterns per (size, p) cell
 # Loss probability grid. The sweep runs every size at every p, so cost scales as
 # len(SIZES) * len(PROBS) * N_TRIALS. Trim any of the three to shorten it.
-PROBS          = [round(x, 3) for x in np.linspace(0.05, 0.5, 10)]
+PROBS          = [round(x, 3) for x in np.linspace(0.3, 0.5, 5)]
 # Which slice each plot takes from the 2-D (size, p) grid:
-PROB_FOR_SIZE_PLOT = 0.30    # size-axis plot uses the p in PROBS nearest this
+PROB_FOR_SIZE_PLOT = 0.1  # size-axis plot uses the p in PROBS nearest this
 SIZE_FOR_PROB_PLOT = None    # prob-axis plot uses this (w, ell); None -> largest
 # TARGET_QUBIT: None -> no target, endpoints eligible for loss (only the input
 #   node is structurally excluded, see below). "output" -> target the output
 #   (readout) qubit of each size; that qubit's node is protected from loss.
 #   int -> a fixed target qubit index; that qubit's node is protected.
 TARGET_QUBIT   = None
-G              = 3     # the g in g-SPF
+G              = 5# the g in g-SPF
 MINIMISE_SUPPORT = True  # keep True: this is where the ILP pays its cost
 CACHE_LOGICAL_BASIS = True  # compute the full-T logical basis once per size
                             # and reuse it across trials (both solvers)
@@ -84,9 +72,10 @@ LOG_Y          = True    # log-scale the runtime axis to show scaling
 # timing curves are averaged over identical instances (recommended when g>1,
 # where the ILP and the g=1-style heuristic have different feasible sets).
 COMPARE_ON_BOTH_SUCCEEDED = True
-OUT_PNG_SIZE   = f"gspf_timing_vs_size_{FAMILY}.png"
-OUT_PNG_PROB   = f"gspf_timing_vs_prob_{FAMILY}.png"
-OUT_PNG_SUCC   = f"gspf_success_rate_{FAMILY}.png"
+OUT_PNG_SIZE   = f"gspf_timing_vs_size_{FAMILY}_{G}.png"
+OUT_PNG_SIZE_ALLP = f"gspf_timing_vs_size_allp_{FAMILY}_{G}.png"
+OUT_PNG_PROB   = f"gspf_timing_vs_prob_{FAMILY}_{G}.png"
+OUT_PNG_SUCC   = f"gspf_success_rate_{FAMILY}_{G}.png"
 # Cost note: worst-case wall time ~ sum over sizes of
 # N_TRIALS * (MAX_TIME + heuristic_time). Large sizes that hit MAX_TIME
 # dominate; lower N_TRIALS or MAX_TIME to shorten the sweep.
@@ -529,6 +518,13 @@ def _series_over(records, group_values, group_key, value_key, success_key=None,
     return np.array(means), np.array(stds)
 
 
+def build_or_lookup_n(records, size_key):
+    for r in records:
+        if r["size_key"] == size_key:
+            return r["num_qubits"]
+    return float("nan")
+
+
 def plot_vs_size(records):
     """ILP solve time vs heuristic setup (basis) floor vs heuristic total,
     along the qubit-count axis, at the loss probability nearest
@@ -575,6 +571,58 @@ def plot_vs_size(records):
     fig.tight_layout()
     fig.savefig(OUT_PNG_SIZE, dpi=150)
     print(f"figure written to {OUT_PNG_SIZE}")
+    plt.show()
+
+
+def plot_vs_size_all_p(records):
+    """One time-vs-n panel per loss probability p, arranged in a grid. Each
+    panel plots ILP solve time, heuristic setup floor, and heuristic total
+    against qubit count on a shared log y-axis, so you can see how the
+    n-scaling changes across the whole loss-probability sweep in one figure.
+    Averaging follows COMPARE_ON_BOTH_SUCCEEDED."""
+    both = COMPARE_ON_BOTH_SUCCEEDED
+    filt = "both-ok instances" if both else "each own successes"
+    ns = [build_or_lookup_n(records, wl) for wl in SIZES]
+
+    nP = len(PROBS)
+    ncols = min(5, nP)
+    nrows = (nP + ncols - 1) // ncols
+    fig, axes = plt.subplots(nrows, ncols, squeeze=False, sharex=True,
+                             sharey=True, figsize=(3.4 * ncols, 3.0 * nrows))
+
+    for idx, p in enumerate(PROBS):
+        ax = axes[idx // ncols][idx % ncols]
+        recs = [r for r in records if r["loss_prob"] == p]
+        ilp_m, ilp_s = _series_over(recs, SIZES, "size_key", "ilp_time",
+                                    "ilp_success", both=both)
+        setup_m, setup_s = _series_over(recs, SIZES, "size_key", "heur_setup",
+                                        "heur_success", both=both)
+        tot_m, tot_s = _series_over(recs, SIZES, "size_key", "heur_time",
+                                    "heur_success", both=both)
+
+        ax.errorbar(ns, ilp_m, yerr=ilp_s, marker="o", capsize=3, ms=4,
+                    color="#4c72b0", label="ILP (solve)")
+        ax.errorbar(ns, setup_m, yerr=setup_s, marker="^", capsize=3, ms=4,
+                    color="#55a868", label="heur setup")
+        ax.errorbar(ns, tot_m, yerr=tot_s, marker="s", capsize=3, ms=4,
+                    color="#dd8452", label="heur total")
+        if LOG_Y:
+            ax.set_yscale("log")
+        ax.set_title(f"p = {p:.2f}", fontsize=9)
+        ax.grid(True, which="both", alpha=0.3)
+        if idx == 0:
+            ax.legend(fontsize=7)
+
+    # hide any unused panels
+    for idx in range(nP, nrows * ncols):
+        axes[idx // ncols][idx % ncols].axis("off")
+
+    fig.supxlabel("number of qubits n")
+    fig.supylabel("average successful run time (s)")
+    fig.suptitle(f"{FAMILY}  |  {N_TRIALS} trials/cell  |  g={G}  |  {filt}")
+    fig.tight_layout()
+    fig.savefig(OUT_PNG_SIZE_ALLP, dpi=150)
+    print(f"figure written to {OUT_PNG_SIZE_ALLP}")
     plt.show()
 
 
@@ -630,20 +678,13 @@ def plot_vs_prob(records):
     plt.show()
 
 
-def build_or_lookup_n(records, size_key):
-    for r in records:
-        if r["size_key"] == size_key:
-            return r["num_qubits"]
-    return float("nan")
-
-
 def plot_success_rate(records):
     """Fraction of trials where the ILP vs the heuristic returned a solution,
     along the qubit-count axis, at the loss probability nearest
-    PROB_FOR_SIZE_PLOT. The gap is the feasibility regime: at g>1 the ILP can
-    use anti_sum in {1,3,...,g} while the heuristic only finds a g=1-style
-    single-anticommutation logical, so instances feasible only at higher
-    anti_sum show up as ILP success above heuristic success."""
+    PROB_FOR_SIZE_PLOT. Both are g-aware (success requires the pair's
+    anticommutation number <= g), so the remaining gap is the heuristic's miss
+    rate: where a <= g solution exists, the ILP finds it by optimising while
+    the heuristic can miss it. ILP success >= heuristic success."""
     p = _nearest_prob(PROB_FOR_SIZE_PLOT)
     recs = [r for r in records if r["loss_prob"] == p]
     ns, ilp_rate, heur_rate, both_rate = [], [], [], []
@@ -736,7 +777,7 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(
-        description="crazy_graph g-SPF ILP vs heuristic timing sweep")
+        description="graph-code g-SPF ILP vs heuristic timing sweep")
     group = parser.add_mutually_exclusive_group()
     group.add_argument("--single-thread", dest="single_thread",
                        action="store_true",
@@ -753,6 +794,7 @@ if __name__ == "__main__":
 
     recs = run_benchmark()
     plot_vs_size(recs)
+    plot_vs_size_all_p(recs)
     plot_vs_prob(recs)
     plot_success_rate(recs)
     summarise_heuristic_phases(recs)
