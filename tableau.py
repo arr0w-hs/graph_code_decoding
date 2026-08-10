@@ -185,9 +185,9 @@ def turn_into_symplectic_basis(xz_pair:list,logicals:list): #takes in a list of 
 
     assert sp(Z_logical_qubit,X_logical_qubit)==1; 'Z and X must anti-commute'
     assert sc.rank_F2(to_gf2_tableau(logicals))==num_logical_qubits_remain*2;'Logicals must be linearly independent'
-
+    additional_logicals=[]
     if num_logical_qubits_remain>1:
-        additional_logicals=[]
+        
         #making the additional logicals commute with X and Z
         for lg in logicals:
 

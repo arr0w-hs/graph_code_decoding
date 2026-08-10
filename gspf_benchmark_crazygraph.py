@@ -44,8 +44,8 @@ FAMILY = "triangular_lattice"
 #   SIZES = [(8, 0.5), (11, 0.5), (14, 0.5), (18, 0.5), (22, 0.5), (26, 0.5)]
 #   e.g. for surface_code:  SIZES = [(3, 0), (5, 0), (7, 0), (9, 0)]
 #SIZES = [(2, 2), (2, 3), (3, 3), (3, 4), (4, 4), (4, 5), (5, 5)]
-#SIZES=SIZES = [(3, 0), (5, 0), (7, 0)]
-SIZES = [(3,3),(4,4),(5,5),(6,6),(7,7)]
+#SIZES=[(3, 0), (5, 0), (7, 0)]
+#SIZES = [(3,3),(4,4),(5,5),(6,6),(7,7)]
 #SIZES = [(2, 2),  (3, 3), (4, 4),  (5, 5),(6,6)]
 N_TRIALS       = 50     # random loss patterns per (size, p) cell
 # Loss probability grid. The sweep runs every size at every p, so cost scales as
@@ -59,14 +59,30 @@ SIZE_FOR_PROB_PLOT = None    # prob-axis plot uses this (w, ell); None -> larges
 #   (readout) qubit of each size; that qubit's node is protected from loss.
 #   int -> a fixed target qubit index; that qubit's node is protected.
 TARGET_QUBIT   = None
-G              = 5# the g in g-SPF
-MINIMISE_SUPPORT = True  # keep True: this is where the ILP pays its cost
+G              = 3# the g in g-SPF
+MINIMISE_SUPPORT = True # keep True: this is where the ILP pays its cost
 CACHE_LOGICAL_BASIS = True  # compute the full-T logical basis once per size
                             # and reuse it across trials (both solvers)
-MAX_TIME       = 60      # ILP solver time cap in seconds (censors long solves)
+FAMILY = "bivariate_bicycle"
+#SIZES  = [(6, 6), (6, 12),(12,12)]    # n = 72, 144, 288
+#SIZES  = [(6, 6), (9, 6),(6,12)]  #(9,6) strictly speaking not the same code family
+SIZES = [(3,3), (3,6),(6,6)] 
+#   TARGET_QUBIT = None      # REQUIRED: BB is k=12; target path is k=1-only
+
+PROBS = [0.05, 0.10]     #  keep p low so logicals survive (high p -> mass failure, meaningless timing)
+N_TRIALS = 10
+MAX_TIME = 100        # BB ILP is slow; give it room, but it censors
+CACHE_LOGICAL_BASIS = True
+COMPARE_ON_BOTH_SUCCEEDED = True
+
+# NOTE: PROB_FOR_SIZE_PLOT should be one of PROBS (e.g. 0.10) so the size plot
+# has data. With n=288 and MAX_TIME=120 the largest cell can take a long time;
+# start with SIZES=[(6,6),(6,12)] to smoke-test before adding (12,12).
+# ---------------------------------------------------------------------------
+MAX_TIME       = 120    # ILP solver time cap in seconds (censors long solves)
 SEED           = 0       # RNG seed for reproducible loss patterns
 QUIET          = True  # suppress the solvers' own print output
-FORCE_SINGLE_THREAD_ILP = True   # pin CP-SAT to 1 worker for fair timing
+FORCE_SINGLE_THREAD_ILP = False  # pin CP-SAT to 1 worker for fair timing
 LOG_Y          = True    # log-scale the runtime axis to show scaling
 # Compare ILP vs heuristic only on trials where BOTH returned a solution, so the
 # timing curves are averaged over identical instances (recommended when g>1,
@@ -329,6 +345,46 @@ def random_graph(num_nodes, edge_prob, output_node=True):
         f"random_graph: no connected graph with node 0 linked after retries "
         f"(n={n}, edge_prob={p_edge}); raise edge_prob or num_nodes")
 
+BB_FAMILY_A = {
+    # (l, m): (A_terms, B_terms)   -- IBM-style series, k=12, treewidth Theta(n)
+    (6, 6):  ([('x', 3), ('y', 1), ('y', 2)], [('y', 3), ('x', 1), ('x', 2)]),
+    (9, 6):  ([('x',3),('y',1),('y',2)], [('y',3),('x',1),('x',2)]),
+    (6, 12): ([('x', 3), ('y', 1), ('y', 2)], [('y', 3), ('x', 1), ('x', 2)]),
+    (12, 12):([('x', 3), ('y', 2), ('y', 7)], [('y', 3), ('x', 1), ('x', 2)]),
+    (12, 6): ([('x', 3), ('y', 1), ('y', 2)], [('y', 3), ('x', 1), ('x', 2)]),
+    (3, 3): ([('x',3),('y',1),('y',2)], [('y',3),('x',1),('x',2)]),   # n=18, k=8
+    (3, 6): ([('x',3),('y',1),('y',2)], [('y',3),('x',1),('x',2)]),   # n=36, k=8
+}
+ 
+ 
+def _bb_shift(N):
+    S = np.zeros((N, N), dtype=int)
+    for i in range(N):
+        S[i, (i + 1) % N] = 1
+    return S
+ 
+ 
+def bb_code_tableau(l, m, A_terms, B_terms):
+    """Bivariate bicycle code -> (X|Z) full-rank stabiliser tableau (GF2).
+    n = 2*l*m data qubits, weight-6 checks, CSS. k=12 for Family A."""
+    Il, Im = np.eye(l, dtype=int), np.eye(m, dtype=int)
+    Sl, Sm = _bb_shift(l), _bb_shift(m)
+    xp = lambda k: np.kron(np.linalg.matrix_power(Sl, k % l) % 2, Im) % 2
+    yp = lambda k: np.kron(Il, np.linalg.matrix_power(Sm, k % m) % 2) % 2
+    def bld(ts):
+        M = np.zeros((l * m, l * m), dtype=int)
+        for v, k in ts:
+            M = (M + (xp(k) if v == 'x' else yp(k))) % 2
+        return M
+    A, B = bld(A_terms), bld(B_terms)
+    HX = np.hstack([A, B]) % 2
+    HZ = np.hstack([B.T, A.T]) % 2
+    n = HX.shape[1]
+    zero = np.zeros_like(HX)
+    T = np.vstack([np.hstack([HX, zero]), np.hstack([zero, HZ])]).astype(int)
+    T = ta.to_gf2_tableau(T).row_reduce()
+    T = T[np.any(np.asarray(T), axis=1)]
+    return ta.to_gf2_tableau(T)
 
 # Family selector: FAMILY picks which builder build_code uses. Each builder
 # takes two size parameters. For the lattice families that is (width, length)
@@ -391,14 +447,20 @@ def _time_call(fn):
 
 def build_code(a, b):
     if FAMILY == "surface_code":
-        # not a graph code: surface_code(L) returns the tableau H directly.
-        # SIZES entries are (L, _) -- the second element is ignored.
         from code_importer import surface_code
         _, _, H, _, _ = surface_code(int(a))
         T = ta.to_gf2_tableau(H)
         return T, T.shape[1] // 2
+    if FAMILY == "bivariate_bicycle":
+        # SIZES entries are (l, m); the code is looked up in BB_FAMILY_A.
+        key = (int(a), int(b))
+        if key not in BB_FAMILY_A:
+            raise KeyError(f"no BB Family A entry for (l,m)={key}; "
+                           f"available: {sorted(BB_FAMILY_A)}")
+        A_terms, B_terms = BB_FAMILY_A[key]
+        T = bb_code_tableau(int(a), int(b), A_terms, B_terms)
+        return T, T.shape[1] // 2
     G = GRAPH_FAMILIES[FAMILY](a, b)
-    # sort node labels so tableau qubit i corresponds to graph node i
     adj = nx.to_numpy_array(G, nodelist=sorted(G.nodes()), dtype=np.uint16)
     _, _, stabi = create_graph_code(adj)
     T = ta.to_gf2_tableau(stabi)
@@ -423,10 +485,29 @@ def run_benchmark():
         _prime_basis_cache(T, num_qubits)   # full-T basis computed once here
 
         for p in PROBS:
+            
             for trial in range(N_TRIALS):
                 # every tableau qubit is lost independently with probability p
                 # (the target qubit, if one is set, is kept out of the sample)
                 lost = sample_lost_qubits(num_qubits, p, rng, target)
+
+# --- g-SPF heuristic ---
+                def _heur():
+                    return generalised_spf_logical_heuristic(
+                        T, lost, G, target_qubit=target,
+                    )
+
+                with _maybe_silence(QUIET):
+                    heur_res, heur_time, heur_crashed, heur_phases = \
+                        _run_heuristic_probed(_heur)
+
+                # dedented: outside the `with`, so not silenced
+                print(f"  [{w}x{ell} p={p:.2f} trial {trial+1}/{N_TRIALS}] "
+                      f"heur {heur_time:7.3f}s "
+                      f"({'ok' if heur_res.get('success') else 'fail'})",
+                      flush=True)
+
+                setup_t, search_t = _phase_split(heur_phases)
 
                 # --- g-SPF (ILP) ---
                 def _ilp():
@@ -441,17 +522,24 @@ def run_benchmark():
                 with _maybe_silence(QUIET):
                     ilp_res, ilp_time, ilp_crashed = _time_call(_ilp)
 
-                # --- g-SPF heuristic ---
-                def _heur():
-                    return generalised_spf_logical_heuristic(
-                        T, lost,G, target_qubit=target,
-                    )
+                # dedented: outside the `with`
+                print(f"  [{w}x{ell} p={p:.2f} trial {trial+1}/{N_TRIALS}] "
+                      f"ILP {ilp_time:7.1f}s "
+                      f"({'ok' if ilp_res.get('success') else 'FAIL'}"
+                      f"{'/cap' if ilp_time >= MAX_TIME-1 else ''})"
+                      f"  | ratio {ilp_time/heur_time:6.1f}x"
+                      if heur_time > 0 else "",
+                      flush=True)
+                
+                # joint support of the returned (x, z) pair, via pair_support
+                def _supp(res):
+                    if not res.get("success"):
+                        return None
+                    s = _sc.pair_support(res.get("x"), res.get("z"), target, True)
+                    return None if (s is None or s == "Nan") else int(s)
 
-                with _maybe_silence(QUIET):
-                    heur_res, heur_time, heur_crashed, heur_phases = \
-                        _run_heuristic_probed(_heur)
-
-                setup_t, search_t = _phase_split(heur_phases)
+                ilp_supp  = _supp(ilp_res)
+                heur_supp = _supp(heur_res)
 
                 records.append({
                     "width": w, "length": ell,
@@ -459,15 +547,40 @@ def run_benchmark():
                     "num_qubits": num_qubits,
                     "loss_prob": float(p),
                     "num_lost": len(lost),
+                    "lost_qubits": list(lost),
+                    "target": target,
+                    "g": G,
+                    # --- ILP ---
                     "ilp_success":  bool(ilp_res.get("success", False)),
                     "ilp_optimal":  ilp_res.get("status_name") == "OPTIMAL",
+                    "ilp_status":   ilp_res.get("status_name"),
                     "ilp_time":     ilp_time,
+                    "ilp_capped":   ilp_time >= MAX_TIME - 1,
                     "ilp_crashed":  ilp_crashed,
+                    "ilp_objective": ilp_res.get("objective"),
+                    "ilp_support":  ilp_supp,
+                    "ilp_support_size_vec": (list(map(int, ilp_res["support_size"]))
+                                             if ilp_res.get("support_size") is not None
+                                             else None),
+                    "ilp_x": (list(map(int, np.asarray(ilp_res["x"]).ravel()))
+                              if ilp_res.get("success") and ilp_res.get("x") is not None
+                              else None),
+                    "ilp_z": (list(map(int, np.asarray(ilp_res["z"]).ravel()))
+                              if ilp_res.get("success") and ilp_res.get("z") is not None
+                              else None),
+                    # --- heuristic ---
                     "heur_success": bool(heur_res.get("success", False)),
                     "heur_time":    heur_time,
                     "heur_setup":   setup_t,
                     "heur_search":  search_t,
                     "heur_crashed": heur_crashed,
+                    "heur_support": heur_supp,
+                    "heur_x": (list(map(int, np.asarray(heur_res["x"]).ravel()))
+                               if heur_res.get("success") and heur_res.get("x") is not None
+                               else None),
+                    "heur_z": (list(map(int, np.asarray(heur_res["z"]).ravel()))
+                               if heur_res.get("success") and heur_res.get("z") is not None
+                               else None),
                     "heur_phases":  heur_phases,
                 })
 
@@ -524,6 +637,50 @@ def build_or_lookup_n(records, size_key):
             return r["num_qubits"]
     return float("nan")
 
+import json, pickle, datetime
+
+def save_all_data(records, tag=None):
+    """Dump every trial's full data to disk: a pickle (exact, all fields incl.
+    heur_phases) and a JSON (portable, human-readable). Also a flat CSV of the
+    key scalar columns for quick loading into pandas/plotting."""
+    stamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    tag = tag or f"{FAMILY}_g{G}"
+    base = f"gspf_data_{tag}_{stamp}"
+
+    # 1. pickle: exact, everything
+    with open(base + ".pkl", "wb") as f:
+        pickle.dump({"config": {
+            "FAMILY": FAMILY, "SIZES": SIZES, "PROBS": PROBS,
+            "N_TRIALS": N_TRIALS, "G": G, "MAX_TIME": MAX_TIME,
+            "MINIMISE_SUPPORT": MINIMISE_SUPPORT, "SEED": SEED,
+            "TARGET_QUBIT": TARGET_QUBIT,
+        }, "records": records}, f)
+
+    # 2. JSON: drop the nested heur_phases dict's non-JSON bits are fine (all
+    #    ints/floats already); everything here is JSON-serialisable.
+    with open(base + ".json", "w") as f:
+        json.dump({"config": {
+            "FAMILY": FAMILY, "SIZES": [list(s) for s in SIZES],
+            "PROBS": PROBS, "N_TRIALS": N_TRIALS, "G": G,
+            "MAX_TIME": MAX_TIME, "MINIMISE_SUPPORT": MINIMISE_SUPPORT,
+            "SEED": SEED, "TARGET_QUBIT": TARGET_QUBIT,
+        }, "records": records}, f, indent=1)
+
+    # 3. CSV: flat scalar columns for quick analysis
+    cols = ["width", "length", "num_qubits", "loss_prob", "num_lost", "g",
+            "ilp_success", "ilp_optimal", "ilp_status", "ilp_time",
+            "ilp_capped", "ilp_objective", "ilp_support",
+            "heur_success", "heur_time", "heur_setup", "heur_search",
+            "heur_support"]
+    import csv
+    with open(base + ".csv", "w", newline="") as f:
+        wtr = csv.DictWriter(f, fieldnames=cols, extrasaction="ignore")
+        wtr.writeheader()
+        for r in records:
+            wtr.writerow({c: r.get(c) for c in cols})
+
+    print(f"\ndata saved: {base}.pkl / .json / .csv  ({len(records)} trials)")
+    return base
 
 def plot_vs_size(records):
     """ILP solve time vs heuristic setup (basis) floor vs heuristic total,
@@ -723,6 +880,75 @@ def plot_success_rate(records):
     plt.show()
 
 
+def plot_support_vs_size(records):
+    """Average joint (X,Z) support of the returned logical vs qubit count, at
+    the loss probability nearest PROB_FOR_SIZE_PLOT. Heuristic support vs ILP
+    support. NOTE: where the ILP is time-capped (ilp_capped), its support is the
+    best found within MAX_TIME, NOT the proven minimum -- so this compares
+    heuristic support against 'ILP-best-within-cap', not against the optimum."""
+    p = _nearest_prob(PROB_FOR_SIZE_PLOT)
+    recs = [r for r in records if r["loss_prob"] == p]
+    ns = [build_or_lookup_n(records, wl) for wl in SIZES]
+    both = COMPARE_ON_BOTH_SUCCEEDED
+
+    def _supp_series(key):
+        means, stds = [], []
+        for wl in SIZES:
+            vals = []
+            for r in recs:
+                if r["size_key"] != wl:
+                    continue
+                if both and not (r["ilp_success"] and r["heur_success"]):
+                    continue
+                v = r.get(key)
+                if v is not None:
+                    vals.append(v)
+            m, s = _mean_std(vals)
+            means.append(m); stds.append(s)
+        return np.array(means), np.array(stds)
+
+    ilp_m, ilp_s   = _supp_series("ilp_support")
+    heur_m, heur_s = _supp_series("heur_support")
+
+    # fraction of the ILP points at each size that were time-capped (so you can
+    # see where 'ILP support' stops being the true optimum)
+    cap_frac = []
+    for wl in SIZES:
+        cell = [r for r in recs if r["size_key"] == wl
+                and (not both or (r["ilp_success"] and r["heur_success"]))]
+        capped = sum(bool(r.get("ilp_capped")) for r in cell if r["ilp_success"])
+        nok = sum(r["ilp_success"] for r in cell)
+        cap_frac.append(capped / nok if nok else float("nan"))
+
+    filt = "both-ok instances" if both else "each own successes"
+    print(f"\n===== joint (X,Z) support vs size at p={p:.2f} ({filt}) =====")
+    print(f"{'size':>6} {'n':>4} | {'heurSupp':>9} {'ilpSupp':>8} "
+          f"{'ratio h/i':>9} {'ILPcap%':>8}")
+    for i, (w, ell) in enumerate(SIZES):
+        def f(x): return "  nan" if np.isnan(x) else f"{x:.2f}"
+        ratio = (heur_m[i] / ilp_m[i]) if (ilp_m[i] and not np.isnan(ilp_m[i])
+                                           and ilp_m[i] > 0) else float("nan")
+        print(f"{w}x{ell:<3} {ns[i]:>4.0f} | {f(heur_m[i]):>9} {f(ilp_m[i]):>8} "
+              f"{f(ratio):>9} {cap_frac[i]*100:>7.0f}%")
+    print("=" * 52 + "\n")
+
+    fig, ax = plt.subplots(figsize=(7, 5))
+    ax.errorbar(ns, ilp_m, yerr=ilp_s, marker="o", capsize=4,
+                color="#4c72b0", label="ILP support (best within cap)")
+    ax.errorbar(ns, heur_m, yerr=heur_s, marker="s", capsize=4,
+                color="#dd8452", label="heuristic support")
+    ax.set_xlabel("number of qubits n")
+    ax.set_ylabel("average joint (X,Z) support size")
+    ax.set_title(f"{FAMILY}  |  p_loss={p:.2f}  |  {N_TRIALS} trials/cell  |  "
+                 f"g={G}  |  {filt}")
+    ax.legend()
+    ax.grid(True, alpha=0.3)
+    fig.tight_layout()
+    fig.savefig(f"gspf_support_vs_size_{FAMILY}_{G}.png", dpi=150)
+    print(f"figure written to gspf_support_vs_size_{FAMILY}_{G}.png")
+    plt.show()
+
+
 def summarise_heuristic_phases(records):
     """Per size: heuristic setup vs coset-search wall time (mean per trial),
     unaccounted 'other' time, and decoder failure counts (None returns -- a
@@ -793,8 +1019,12 @@ if __name__ == "__main__":
     print(f"single-thread ILP: {args.single_thread}")
 
     recs = run_benchmark()
+    
+    save_all_data(recs)          
     plot_vs_size(recs)
+   
     plot_vs_size_all_p(recs)
+    plot_support_vs_size(recs)
     plot_vs_prob(recs)
     plot_success_rate(recs)
     summarise_heuristic_phases(recs)

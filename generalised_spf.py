@@ -490,10 +490,20 @@ def generalised_spf_logical_heuristic(tableau, lost_qubits: list,g:int,
 
     _, _, logical_ops = sc.find_logical_op_basis(T, num_qubits) #find a basis of logical operators
 
-    assert len(logical_ops) == 2, \
-        f"Expected one logical qubit, got {len(logical_ops)//2}"
+ 
+
+    # --- k>1 fix: pick ONE conjugate pair before cleaning ---
+    sym = ta.symplectic_basis(logical_ops)          # already k-agnostic
+    X0, Z0 = sym[0]                                  # a genuine anticommuting pair
+    X0 = ta.to_gf2_tableau(X0).ravel()
+    Z0 = ta.to_gf2_tableau(Z0).ravel()
+
+    T_clean, logi_commute_clean, logi_anticommute_clean, indices, success = update_T_and_logi_after_loss(T, [X0, Z0], lost_qubits, reduce=row_reduce)
+
+    """assert len(logical_ops) == 2, \
+        f"Expected one logical qubit, got {len(logical_ops)//2}"""
   
-    T_clean, logi_commute_clean, logi_anticommute_clean, indices, success=update_T_and_logi_after_loss(T,logical_ops,lost_qubits,reduce=row_reduce)
+    #T_clean, logi_commute_clean, logi_anticommute_clean, indices, success=update_T_and_logi_after_loss(T,logical_ops,lost_qubits,reduce=row_reduce)
     
     if not success:
         print('could not clean logical')
