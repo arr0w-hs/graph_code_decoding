@@ -62,9 +62,27 @@ HEUR_CACHE_COLUMNS = ["BB-type", "support", "support size", "found by",
 EXACT_CACHE_COLUMNS = ["BB-type", "support", "support size", "found by",
                        "status", "guaranteed minimum", "X logical", "Z logical"]
 
+MAX_CACHE = 500          # max distinct pairs per cache; None = unbounded
+CACHE_EVICT = "last"     # "best" | "fifo" | "last" | "drop"
 
-def cache_add_heuristic(store, x, z, target_qubit, lm_tuple):
-    """store: dict with 'keys' (set) and 'rows' (list). Adds if support new."""
+
+def _evict_index(store, policy):
+    if not store["rows"]:
+        return None
+    if policy == "fifo":
+        return 0
+    if policy == "last":
+        return len(store["rows"]) - 1
+    return None
+
+
+def _reindex_exact_keys(store):
+    store["keys"] = {(r["BB-type"], frozenset(r["support"])): i
+                     for i, r in enumerate(store["rows"])}
+
+
+def cache_add_heuristic(store, x, z, target_qubit, lm_tuple,
+                        max_cache=MAX_CACHE, policy=CACHE_EVICT):
     if x is None or z is None:
         return
     supp = sc.pair_support(x, z, target_qubit)
@@ -73,22 +91,35 @@ def cache_add_heuristic(store, x, z, target_qubit, lm_tuple):
     key = (lm_tuple, supp)
     if key in store["keys"]:
         return
+    new_size = len(supp)
+    if max_cache is not None and len(store["rows"]) >= max_cache:
+        if policy == "drop":
+            return
+        if policy == "best":
+            worst_idx = max(range(len(store["rows"])),
+                            key=lambda i: store["rows"][i]["support size"])
+            if store["rows"][worst_idx]["support size"] <= new_size:
+                return
+            evict = worst_idx
+        else:
+            evict = _evict_index(store, policy)
+        ev_key = (store["rows"][evict]["BB-type"],
+                  frozenset(store["rows"][evict]["support"]))
+        store["keys"].discard(ev_key)
+        store["rows"].pop(evict)
     store["keys"].add(key)
     store["rows"].append({
         "BB-type": lm_tuple,
         "support": sorted(int(q) for q in supp),
-        "support size": len(supp),
+        "support size": new_size,
         "found by": "Heuristic",
         "X logical": ta.tableau2paulistring(x),
         "Z logical": ta.tableau2paulistring(z),
     })
 
 
-def cache_add_exact(store, x, z, target_qubit, lm_tuple, source, status_name):
-    """store: dict with 'keys' (dict key->row index) and 'rows' (list).
-    guaranteed minimum := (status_name == 'OPTIMAL'). If the support is already
-    cached but this solve proves optimality and the old one didn't, upgrade the
-    existing row's marker."""
+def cache_add_exact(store, x, z, target_qubit, lm_tuple, source, status_name,
+                    max_cache=MAX_CACHE, policy=CACHE_EVICT):
     if x is None or z is None:
         return
     supp = sc.pair_support(x, z, target_qubit)
@@ -104,19 +135,34 @@ def cache_add_exact(store, x, z, target_qubit, lm_tuple, source, status_name):
             old["status"] = status_name
             old["found by"] = source
         return
+    new_size = len(supp)
+    if max_cache is not None and len(store["rows"]) >= max_cache:
+        if policy == "drop":
+            return
+        if policy == "best":
+            def badness(r):
+                return (0 if r["guaranteed minimum"] else 1, r["support size"])
+            worst_idx = max(range(len(store["rows"])),
+                            key=lambda i: badness(store["rows"][i]))
+            new_badness = (1 if not guaranteed else 0, new_size)
+            if badness(store["rows"][worst_idx]) <= new_badness:
+                return
+            evict = worst_idx
+        else:
+            evict = _evict_index(store, policy)
+        store["rows"].pop(evict)
+        _reindex_exact_keys(store)
     store["keys"][key] = len(store["rows"])
     store["rows"].append({
         "BB-type": lm_tuple,
         "support": sorted(int(q) for q in supp),
-        "support size": len(supp),
+        "support size": new_size,
         "found by": source,
         "status": status_name,
         "guaranteed minimum": guaranteed,
         "X logical": ta.tableau2paulistring(x),
         "Z logical": ta.tableau2paulistring(z),
     })
-
-
 def _blank_row(columns):
     return {c: None for c in columns}
 
@@ -162,6 +208,7 @@ gg = 3
 lost_prob = np.linspace(0, 0.2, 5)
 ms = True
 target_qubit = None
+MAX_CACHE = 500     # max distinct pairs kept per cache; None = unbounded
 # ---------------------------------------------------------------------------- #
 
 out_dict = defaultdict(list)
