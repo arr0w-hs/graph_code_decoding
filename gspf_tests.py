@@ -6,10 +6,10 @@ import tableau as ta
 import stabiliser_code as sc
 
 
-def stabiliser_logical_commutation_check(stab_tableau : list[list], x_logi, z_logi, fail):
-
-    print("Number of stabilisers:", len(stab_tableau))
-    print("Number of qubits:", len(stab_tableau[0])//2)
+def stabiliser_logical_commutation_check(stab_tableau : list[list], x_logi, z_logi, fail, printing):
+    if printing:
+        print("Number of stabilisers:", len(stab_tableau))
+        print("Number of qubits:", len(stab_tableau[0])//2)
     assert len(stab_tableau) > 0, "No stabilisers found"
 
 
@@ -21,13 +21,13 @@ def stabiliser_logical_commutation_check(stab_tableau : list[list], x_logi, z_lo
 
         if not ta.commutation_check(stab, z_logi):
             fail.append(f"Error: Logical {ta.tableau2paulistring(z_logi)} does not commute with the following stabiliser {ta.tableau2paulistring(stab)}")
-
-    print("Stabiliser logical commutation test complete.")
+    if printing:
+        print("Stabiliser logical commutation test complete.")
 
     return fail
 
 
-def x_and_z_logical_anticommutation(x_logi, z_logi, g, fail):
+def x_and_z_logical_anticommutation(x_logi, z_logi, g, fail, printing):
 
     res = ta.commutation_check(x_logi, z_logi)
     if res:
@@ -36,14 +36,16 @@ def x_and_z_logical_anticommutation(x_logi, z_logi, g, fail):
 
         res1 = ta.qubit_wise_commutation(x_logi, z_logi)
         # print("X and Z logical anticommute on the following qubits", res1)
-        print("The number of logical anticommutations =", len(res1))
-        if len(res1) > g:
-            print("Anti-commutation of logicals exceeds g")
+        if printing:
+            print("The number of logical anticommutations =", len(res1))
+            if len(res1) > g:
+                print("Anti-commutation of logicals exceeds g")
+    if printing:
+        print("Logical anticommutation test complete.")
 
-    print("Logical anticommutation test complete.")
     return fail
 
-def lost_qubit_logical_overlap(x_logi, z_logi, lost_qubits, fail):
+def lost_qubit_logical_overlap(x_logi, z_logi, lost_qubits, fail, printing):
 
     for logical in (x_logi, z_logi):
         num_qubits = len(logical)//2
@@ -61,12 +63,13 @@ def lost_qubit_logical_overlap(x_logi, z_logi, lost_qubits, fail):
             fail.append(f"Logical {ta.tableau2paulistring(logical)} and lost qubits have overlaps at: {error}")
 
 
-    print("Lost-qubit logical test complete.")
+    if printing:
+        print("Lost-qubit logical test complete.")
 
     return fail
 
 
-def logical_commute_with_measurements(x_logi, z_logi, measurement, fail):
+def logical_commute_with_measurements(x_logi, z_logi, measurement, fail, printing):
 
     for meas in measurement:
         if not ta.commutation_check(x_logi, meas):
@@ -76,30 +79,38 @@ def logical_commute_with_measurements(x_logi, z_logi, measurement, fail):
         if not ta.commutation_check(z_logi, meas):
             fail.append("Logical does not commute with the measurements")
             fail.append(f"Logical: {ta.tableau2paulistring(z_logi)}, Measurement: {ta.tableau2paulistring(meas)}")
+    if printing:
+        print("Measurement commutation test complete.")
 
-    print("Measurement commutation test complete.")
     return fail
 
 
-def test_gspf(tableau, x_logi, z_logi, measurements, lost_qubits, g=0):
+def test_gspf(tableau, x_logi, z_logi, measurements, lost_qubits, g=0, printing = False):
     failure = []
-    print("\n========================================")
-    print("             g-SPF test")
-    print("======================================== \n")
+    if x_logi is None or z_logi is None:
+        return None
 
-    failure = stabiliser_logical_commutation_check(tableau, x_logi, z_logi, failure)
-    failure = x_and_z_logical_anticommutation(x_logi, z_logi, g, failure)
-    failure = logical_commute_with_measurements(x_logi, z_logi, measurements, failure)
-    failure = lost_qubit_logical_overlap(x_logi, z_logi, lost_qubits, failure)
+    if printing:
+        print("\n========================================")
+        print("             g-SPF test")
+        print("======================================== \n")
+
+    failure = stabiliser_logical_commutation_check(tableau, x_logi, z_logi, failure, printing)
+    failure = x_and_z_logical_anticommutation(x_logi, z_logi, g, failure, printing)
+    failure = logical_commute_with_measurements(x_logi, z_logi, measurements, failure, printing)
+    failure = lost_qubit_logical_overlap(x_logi, z_logi, lost_qubits, failure, printing)
 
     if len(failure) != 0:
-        print("*************************")
-        print("Following tests failed")
-        print("*************************\n")
-        for ele in failure:
-            print(ele)
+        if printing:
+            print("*************************")
+            print("Following tests failed")
+            print("*************************\n")
+            for ele in failure:
+                print(ele)
+        return False
 
-    return
+    if len(failure) == 0:
+        return True
 
 if __name__ == "__main__":
     from generalised_spf import create_graph_code

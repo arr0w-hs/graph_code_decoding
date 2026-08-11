@@ -256,8 +256,8 @@ def gspf_ilp(tableau : np.ndarray, xlogical: list,
             "status": status,
             "status_name": status_name,
             "objective": None,
-            "x": xlogical,
-            "z": zlogical,
+            "x": None,
+            "z": None,
             "support": None,
             "bx": None,
             "bz": None,
@@ -451,14 +451,14 @@ def generalised_spf_logical(tableau : np.ndarray,
                       target_qubit=target_reduced,
                       max_time = max_time,
                       minimise_support = minimise_support)
-
-    if correct_for_lost_indices:
-        x = result['x']
-        z = result['z']
-        x=sc.restore_lost_qubits(x, indices, num_qubits)
-        z=sc.restore_lost_qubits(z, indices, num_qubits)
-        result['x'] = x
-        result['z'] = z
+    if result["success"]:
+        if correct_for_lost_indices:
+            x = result['x']
+            z = result['z']
+            x=sc.restore_lost_qubits(x, indices, num_qubits)
+            z=sc.restore_lost_qubits(z, indices, num_qubits)
+            result['x'] = x
+            result['z'] = z
 
     return result, False, None
 
@@ -470,7 +470,7 @@ def generalised_spf_logical_heuristic(tableau, lost_qubits: list,g:int,
     #logical_qubit: which of the logical qubits to choose from, by default 0
     # order determined by symplectic basis, cannot be chosen before hand
     #if you want specific logicals to be passed, code needs to be adapted
-    
+
     result = {
         "success": False,
         "status": None,
@@ -498,23 +498,23 @@ def generalised_spf_logical_heuristic(tableau, lost_qubits: list,g:int,
 
     _, _, logical_ops = sc.find_logical_op_basis(T, num_qubits) #find a basis of logical operators
 
- 
+
 
     # --- k>1 fix: pick ONE conjugate pair before cleaning ---
     sym = ta.symplectic_basis(logical_ops)          # already k-agnostic , sym is a list of tuples [(X_0,Z_0),(X_1,Z_1),...(X_k,Z_k)]
     assert len(sym) == T.shape[1]//2-T.shape[0], \
         f"Expected {T.shape[1]//2-T.shape[0]} logical qubit, got {len(sym)}"""
-    
+
     X0, Z0 = sym[logical_qubit]                                  # a genuine anticommuting pair
     X0 = ta.to_gf2_tableau(X0).ravel()
     Z0 = ta.to_gf2_tableau(Z0).ravel()
 
     T_clean, logi_commute_clean, logi_anticommute_clean, indices, success = update_T_and_logi_after_loss(T, [X0, Z0], lost_qubits, reduce=row_reduce)
-    
+
     if not success:
         print('could not clean logical')
         return result
- 
+
     _, m_remain = T_clean.shape #number of remaining stabilisers changes
     num_qubits_remain = m_remain // 2
 
@@ -533,10 +533,10 @@ def generalised_spf_logical_heuristic(tableau, lost_qubits: list,g:int,
     num_logical_qubits_remain=len(reduced_logicals)//2
 
     X_logical_qubit = ta.to_gf2_tableau(logi_commute_clean).ravel()
- 
+
     Z_logical_qubit = ta.to_gf2_tableau(logi_anticommute_clean).ravel()
-   
-    additional_logicals=[] #note for k>1 at the start this will include old surviving logicals, 
+
+    additional_logicals=[] #note for k>1 at the start this will include old surviving logicals,
     #one could maybe make this less redundant, not sure what is faster
 
     if num_logical_qubits_remain>1:
@@ -546,8 +546,8 @@ def generalised_spf_logical_heuristic(tableau, lost_qubits: list,g:int,
         logical_pairs=ta.turn_into_symplectic_basis([X_logical_qubit,Z_logical_qubit],reduced_logicals)
 
         additional_logicals=unravel_symplectic_basis(logical_pairs[1:])
- 
-        
+
+
     #-------------------------------------------------------------------------------------------------------#
     #find short logical that commutes with logi_commute and anti-commutes with logi_anti_commute_clean
     #passing a symplectic basis to decoder, otherwise there cannot be a solution!
@@ -567,11 +567,11 @@ def generalised_spf_logical_heuristic(tableau, lost_qubits: list,g:int,
     with probabiltiies that make the previously found logical unlikely."""
 
     if target_reduced is not None:
-         
+
         Z_short_second = sc.find_anti_commuting_logi_at_O(T_clean, X_short_first,additional_logicals+[Z_logical_qubit], target_reduced)
 
         if Z_short_second is None:
-            
+
             for i in range(anti_commut_iter):
                 X_short_first= dc.find_first_short_logical_in_coset(T_clean, \
                 logi_commute=X_logical_qubit,logi_anticommute=Z_logical_qubit,\
@@ -587,7 +587,7 @@ def generalised_spf_logical_heuristic(tableau, lost_qubits: list,g:int,
                     break
 
     else:
-        
+
         Z_short_second = dc.find_short_second_logical_in_coset(T_clean, X_short_first,Z_logical_qubit,additional_logicals, max_iter=max_iter)
 
     if Z_short_second is None:
@@ -597,12 +597,12 @@ def generalised_spf_logical_heuristic(tableau, lost_qubits: list,g:int,
 
     X_short_first = ta.to_gf2_tableau(X_short_first).ravel()
     Z_short_second = ta.to_gf2_tableau(Z_short_second).ravel()
- 
+
 
     anti_commute_size=ta.qubit_wise_commutation(X_short_first,Z_short_second)
- 
+
     if len(anti_commute_size)>g:
-        
+
         return result
 
 
@@ -659,12 +659,12 @@ if __name__ == "__main__":
 
     target_qubit=24
     t1 = time.time()
-    res,_,_ =  generalised_spf_logical(T,previous_meas, lq, gg, target_qubit=target_qubit, minimise_support=True)
+    res, _, _ =  generalised_spf_logical(T,previous_meas, lq, gg, target_qubit=None, minimise_support=True)
     print(time.time()-t1)
 
     # res = generalised_spf_logical(stabi, xlogiii, zlogi, previous_meas, lq, gg, target_qubit=None)
     # print(res)
-    print("success new: ",res['success'])
+    print("success new: ", res['success'])
     if res['success']:
         xlo = res["x"]
         zlo = res["z"]
@@ -676,17 +676,17 @@ if __name__ == "__main__":
         print(supp)
 
     print("\n ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n")
-    # t1 = time.time()
-    # res =  gspf_ilp(T,xlogi, zlogi, previous_meas, lq, gg, target_qubit=7, minimise_support=False)
-    # print(time.time()-t1)
-    # print("success old: ",res['success'])
-    # if res['success']:
-    #     xlo = res["x"]
-    #     zlo = res["z"]
-    #     print("support_size", sum(res["support_size"]))
-    #     print("xlogical output from gspf", ta.tableau2paulistring(xlo))
-    #     print("zlogical output from gspf", ta.tableau2paulistring(zlo))
-    #     test_gspf(T, xlo, zlo, previous_meas, lq, g=gg)
+    t1 = time.time()
+    res =  gspf_ilp(T,xlogi, zlogi, previous_meas, lq, gg, target_qubit=7, minimise_support=False)
+    print(time.time()-t1)
+    print("success old: ",res['success'])
+    if res['success']:
+        xlo = res["x"]
+        zlo = res["z"]
+        print("support_size", sum(res["support_size"]))
+        print("xlogical output from gspf", ta.tableau2paulistring(xlo))
+        print("zlogical output from gspf", ta.tableau2paulistring(zlo))
+        test_gspf(T, xlo, zlo, previous_meas, lq, g=gg)
 
 
     t1 = time.time()

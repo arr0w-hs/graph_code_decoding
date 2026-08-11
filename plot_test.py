@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import networkx as nx
 from matplotlib.lines import Line2D
+from matplotlib.colors import LogNorm
 
 
 plt.rcParams.update({'font.size': 12})
@@ -38,8 +39,6 @@ dr = os.path.join(dr, "threshold_folder")
 
 a = "minimise"
 a = "no_min"
-a = "2026-08-05"
-dir_name = os.path.join(dr, a)
 
 #  filees = ["114507_sc_thres_2000.csv"]
 # files = ["153813_sc_thres_2000_nomin_True.csv", "001045_sc_thres_2000_nomin_True.csv",
@@ -55,279 +54,269 @@ dir_name = os.path.join(dr, a)
 #     print(out_df)
 
 
+dates = ["2026-08-05",
+        "2026-08-06",
+        "2026-08-08",
+        "2026-08-09"]
 out_list = []
-for file in os.listdir(dir_name):
-    if file.endswith(".csv"):
-        df = pd.read_csv(os.path.join(dir_name, file))
-        out_list.append(df)
+
+skip_d3_files = ["224415_sc_thres_min_True_1.csv",
+                "224421_sc_thres_min_True_1.csv",
+                 "224422_sc_thres_min_True_1.csv",
+                 "224435_sc_thres_min_True_1.csv",
+                 "224522_sc_thres_min_True_1.csv",
+                 ]
+for a in dates:
+    dir_name = os.path.join(dr, a)
+    # for file in os.listdir(dir_name):
+    #     if file.endswith(".csv"):
+    #         if "True" in file:
+    #             if "_5" in file:
+    #                 continue
+    #             # print(file)
+    #             df = pd.read_csv(os.path.join(dir_name, file), on_bad_lines="skip", engine='python')
+    #             out_list.append(df)
+    #         # print(file)
+
+    #         skip_d3_files = ["file1.csv", "file2.csv"]
+
+    for file in os.listdir(dir_name):
+        if file.endswith(".csv") and "True" in file:
+            if "_5" in file:
+                continue
+
+            df = pd.read_csv(os.path.join(dir_name, file), on_bad_lines="skip", engine="python")
+
+            # if file in skip_d3_files:
+            if file in skip_d3_files:
+                df = df[pd.to_numeric(df["Distance"], errors="coerce") != 3]
+
+            out_list.append(df)
+
+# out_df = pd.concat(ele for ele in out_list)
+# print(out_df)
+out_df = pd.concat(out_list).reset_index(drop=True)
+out_df = out_df.drop(columns=["lost_qubits",
+                              'Heuristic X logical', 'Heuristic Z logical',
+                              'g-SPF X logical', 'g-SPF Z logical',
+                              'ILP X logical', 'ILP Z logical'])
 
 
-out_df1 = pd.concat(ele for ele in out_list)
-print(out_df1)
-# out_df = (
-#     out_df1.groupby(["method", "loss_prob", "distance"], as_index=False)
-#     [["runtime", "support_size", "teleportation_rate"]]
-#     .mean()
-# )
+methods = ["Heuristic", "ILP", "g-SPF"]
+plots = [" support size", " runtime", " g", " verify"]
+# plots = [" support size"]
+# plots = [" runtime"]
+# plots = [" g"]
+# plots = [" support size", " runtime"]
 
-# fig, ax = plt.subplots(figsize=(8.5, 5))
-# # ax = fig.add_axes([0.10, 0.15, 0.58, 0.75])
-# distances = sorted(out_df["distance"].unique())
-# methods = sorted(out_df["method"].unique())
+markers = ["o", "v", "^"]
+linestyles = [":", "--", "-"]
 
-# color_map = {
-#     distance: plt.cm.tab10(i % 10)
-#     for i, distance in enumerate(distances)}
+# print(out_df["Loss probability"])
+# out_df = out_df[out_df["Loss probability"] <= 1]
+out_df["Loss probability"] = pd.to_numeric(out_df["Loss probability"], errors="coerce")
+out_df = out_df[out_df["Loss probability"] <= 1]
 
-# marker_list = ["o", "s", "^", "D", "v", "P", "X", "*"]
-# marker_map = {
-#     method: marker_list[i % len(marker_list)]
-#     for i, method in enumerate(methods)}
+# print(out_df[pd.to_numeric(out_df["Distance"], errors="coerce").isna()])
+out_df["Distance"] = pd.to_numeric(out_df["Distance"])
+distances = sorted(out_df["Distance"].unique())
 
-# line_styles = [":", "--", "-", ":", ","]
-# linestyle_map = {
-#     method: line_styles[i % len(line_styles)]
-#     for i, method in enumerate(methods)}
+# for p in plots:
+#     fig, ax = plt.subplots(figsize=(8.5, 5))
+#     # out_df["Distance"] = pd.to_numeric(out_df["Distance"])
+#     # distances = sorted(out_df["Distance"].unique())
+#     # distances = sorted(out_df["Distance"].unique())
+
+#     color_map = {
+#         distance: plt.cm.tab10(i % 10)
+#         for i, distance in enumerate(distances)}
+
+#     marker_list = ["o", "v", "^", "D", "s", "P", "X", "*"]
+#     marker_map = {
+#         method: marker_list[i % len(marker_list)]
+#         for i, method in enumerate(methods)}
+
+#     line_styles = [":", "--", "-", ":", ","]
+#     linestyle_map = {
+#         method: line_styles[i % len(line_styles)]
+#         for i, method in enumerate(methods)}
 
 
-# for distance, distance_df in out_df.groupby("distance"):
-#     for method, method_df in distance_df.groupby("method"):
-#         method_df = method_df.sort_values("loss_prob")
+#     for i, (distance, distance_df) in enumerate(out_df.groupby("Distance")):
+#         distance_df = distance_df.copy()
+#         # print(distance_df.keys())
+#         for method in methods:
+#             col = method + p
+#             # distance_df[col] = distance_df[col].replace({"True": 1, "False": 0, True: 1, False: 0})
+#             distance_df[col] = pd.to_numeric(distance_df[col].replace({"True": 1, "False": 0}), errors="coerce")
 
-#         ax.plot(
-#             method_df["loss_prob"],
-#             method_df["runtime"],
+#         cols = ["Loss probability"] + [method + p for method in methods]
+#         # print(distance_df)
+#         distance_df = distance_df[cols]
+#         # print(distance_df)
+#         # for col in cols[1:]:
+#         #     print(col, distance_df.loc[pd.to_numeric(distance_df[col], errors="coerce").isna() & distance_df[col].notna(), col].unique())
+
+#         # distance_df = distance_df[cols].groupby("Loss probability", as_index=False).mean()
+
+#         distance_df[cols[1:]] = distance_df[cols[1:]].apply(pd.to_numeric, errors="coerce")
+#         distance_df = distance_df[cols].groupby("Loss probability", as_index=False).mean()
+#         for j, method in enumerate(methods):
+#             ax.plot(distance_df["Loss probability"], distance_df[method + p], color=plt.cm.tab10(i % 10), marker=markers[j], linestyle=linestyles[j], label=f"{method}, distance {distance}")
+
+#     ax.grid()
+#     ax.legend()
+
+#     ax.set_xlabel("Loss probability", fontsize=fs)
+#     if p == " g":
+#         p = "logical overlap"
+#     ax.set_ylabel(f"Average {p}", fontsize=fs)
+#     if p == " runtime":
+#         ax.set_yscale("log")
+#     ax.grid(True, which="both", alpha=0.3)
+#     ax.tick_params(axis="both", labelsize=fs)
+
+#     ax.set_xlabel("Loss probability", fontsize=fs)
+#     if p == " g":
+#         p = "logical overlap"
+#     ax.set_ylabel(f"Average {p}", fontsize=fs)
+#     if p == " runtime":
+#         ax.set_yscale("log")
+#     ax.grid(True, which="both", alpha=0.3)
+#     ax.tick_params(axis="both", labelsize=fs)
+
+#     # Legend for distances: colour
+#     # Distance entries: colour
+#     distance_handles = [
+#         Line2D(
+#             [0],
+#             [0],
 #             color=color_map[distance],
+#             linewidth=6,
+#             label=f"{distance}",
+#         )
+#         for distance in distances
+#     ]
+
+#     # Method entries: marker and line style
+#     method_handles = [
+#         Line2D(
+#             [0],
+#             [0],
+#             color="black",
 #             marker=marker_map[method],
 #             linestyle=linestyle_map[method],
+#             linewidth=1.8,
+#             markersize=6,
+#             label=str(method),
 #         )
+#         for method in methods
+#     ]
 
-# ax.set_xlabel("Loss probability", fontsize=fs)
-# ax.set_ylabel("Average runtime", fontsize=fs)
-# ax.set_yscale("log")
-# ax.grid(True, which="both", alpha=0.3)
-# ax.tick_params(axis="both", labelsize=fs)
+#     combined_handles = distance_handles + method_handles
+#     distance_heading = Line2D(
+#         [], [], linestyle="None", marker=None, label="Distance")
 
-# # Legend for distances: colour
-# # Distance entries: colour
-# distance_handles = [
-#     Line2D(
-#         [0],
-#         [0],
-#         color=color_map[distance],
-#         linewidth=6,
-#         label=f"{distance}",
+#     method_heading = Line2D(
+#         [], [], linestyle="None", marker=None, label="Methods")
+
+#     combined_handles = (
+#         [distance_heading]
+#         + distance_handles
+#         + [method_heading]
+#         + method_handles)
+
+#     legend = ax.legend(
+#         handles=combined_handles,
+#         loc="upper left",
+#         bbox_to_anchor=(1.02, 1.0),   # outside, to the right
+#         borderaxespad=0,
+#         fontsize=13,
+#         handlelength=1,
+#         labelspacing=0.5,
+#         frameon=True,
 #     )
-#     for distance in distances
-# ]
 
-# # Method entries: marker and line style
-# method_handles = [
-#     Line2D(
-#         [0],
-#         [0],
-#         color="black",
-#         marker=marker_map[method],
-#         linestyle=linestyle_map[method],
-#         linewidth=1.8,
-#         markersize=6,
-#         label=str(method),
-#     )
-#     for method in methods
-# ]
+#     # Make the two section headings bold
+#     legend_texts = legend.get_texts()
+#     legend_texts[0].set_weight("bold")
+#     legend_texts[len(distance_handles) + 1].set_weight("bold")
 
-# combined_handles = distance_handles + method_handles
-# # Text-only section headings
-# distance_heading = Line2D(
-#     [], [], linestyle="None", marker=None, label="Distance"
-# )
-
-# method_heading = Line2D(
-#     [], [], linestyle="None", marker=None, label="Methods"
-# )
-
-# combined_handles = (
-#     [distance_heading]
-#     + distance_handles
-#     + [method_heading]
-#     + method_handles
-# )
-
-# legend = ax.legend(
-#     handles=combined_handles,
-#     loc="upper left",
-#     bbox_to_anchor=(1.02, 1.0),   # outside, to the right
-#     borderaxespad=0,
-#     fontsize=13,
-#     handlelength=1,
-#     labelspacing=0.5,
-#     frameon=True,
-# )
-
-# # Make the two section headings bold
-# legend_texts = legend.get_texts()
-# legend_texts[0].set_weight("bold")
-# legend_texts[len(distance_handles) + 1].set_weight("bold")
-
-# # Reserve space on the right for the legend
-# fig.subplots_adjust(right=0.72)
+#     # Reserve space on the right for the legend
+#     fig.subplots_adjust(right=0.72)
 
 
-# fig.tight_layout()
-
-# # fig.savefig(
-# #     os.path.join(dr, f"{a}_runtime.pdf"),
-# #     dpi=800,
-# #     bbox_inches="tight",
-# # )
-# # plt.show()
+#     fig.tight_layout()
+#     # fig.savefig(os.path.join(dr, f"{p}_{method}.pdf"), dpi=800, bbox_inches="tight")
 
 
+# # # plt.show()
+# # plots = [" support size"]
+# # df = (out_df[np.isclose(out_df["Loss probability"], 0.6) & (out_df["Distance"] == 7)])
+# # print(df["ILP support size"])
 
-# fig, ax = plt.subplots(figsize=(8.5, 5))
-# # ax = fig.add_axes([0.10, 0.15, 0.58, 0.75])
+# # for p in plots:
 
-# distances = sorted(out_df["distance"].unique())
-# methods = sorted(out_df["method"].unique())
+# #     fig, ax = plt.subplots(figsize=(8.5, 5))
 
-# color_map = {
-#     distance: plt.cm.tab10(i % 10)
-#     for i, distance in enumerate(distances)
-# }
-# marker_list = ["o", "s", "^", "D", "v", "P", "X", "*"]
-# marker_map = {
-#     method: marker_list[i % len(marker_list)]
-#     for i, method in enumerate(methods)
-# }
-# line_styles = [":", "--", "-", ":", ","]
-# linestyle_map = {
-#     method: line_styles[i % len(line_styles)]
-#     for i, method in enumerate(methods)
-# }
+# #     for i, (distance, distance_df) in enumerate(out_df.groupby("Distance")):
+# #         if distance != 7:
+# #             continue
+# #         distance_df = distance_df.copy()
+# #         for method in methods:
+# #             col = method + p
+# #             distance_df[col] = pd.to_numeric(distance_df[col].replace({"True": 1, "False": 0}), errors="coerce")
 
-# filter_df = out_df1[out_df1["support_size"] != 0]
-# # filter_df = (
-# #     filter_df.groupby(["method", "loss_prob", "distance"], as_index=False)
-# #     [["runtime", "support_size", "teleportation_rate"]]
-# #     .mean()
-# # )
+# #         cols = ["Loss probability"] + [method + p for method in methods]
 
-# for distance, distance_df in filter_df.groupby("distance"):
-#     for method, method_df in distance_df.groupby("method"):
-#         method_df = method_df.sort_values("loss_prob")
-#         method_df = method_df[
-#                     method_df["support_size"] != 0
-#                 ].sort_values("loss_prob")
+# #         distance_df = distance_df[cols]
+# #         # print(distance_df[distance_df["Loss probability"==0.6]])
 
-#         ax.plot(
-#             method_df["loss_prob"],
-#             method_df["support_size"],
-#             color=color_map[distance],
-#             marker=marker_map[method],
-#             linestyle=linestyle_map[method],
-#         )
+# #         distance_df[cols[1:]] = distance_df[cols[1:]].apply(pd.to_numeric, errors="coerce")
+# #         distance_df = distance_df[cols].groupby("Loss probability", as_index=False).mean()
+# #         for j, method in enumerate(methods):
+# #             ax.plot(distance_df["Loss probability"], distance_df[method + p], color=plt.cm.tab10(i % 10), marker=markers[j], linestyle=linestyles[j], label=f"{method}, distance {distance}")
 
-# ax.set_xlabel("Loss probability", fontsize=fs)
-# ax.set_ylabel("Average support size", fontsize=fs)
-# ax.set_yscale("log")
-# ax.grid(True, which="both", alpha=0.3)
-# ax.tick_params(axis="both", labelsize=fs)
+# #     ax.grid()
+# #     ax.legend()
 
-# # Legend for distances: colour
-# # Distance entries: colour
-# distance_handles = [
-#     Line2D(
-#         [0],
-#         [0],
-#         color=color_map[distance],
-#         linewidth=6,
-#         label=f"{distance}",
-#     )
-#     for distance in distances
-# ]
-
-# # Method entries: marker and line style
-# method_handles = [
-#     Line2D(
-#         [0],
-#         [0],
-#         color="black",
-#         marker=marker_map[method],
-#         linestyle=linestyle_map[method],
-#         linewidth=1.8,
-#         markersize=6,
-#         label=str(method),
-#     )
-#     for method in methods
-# ]
-
-# combined_handles = distance_handles + method_handles
-
-# # Text-only section headings
-# distance_heading = Line2D(
-#     [], [], linestyle="None", marker=None, label="Distance"
-# )
-
-# method_heading = Line2D(
-#     [], [], linestyle="None", marker=None, label="Methods"
-# )
-
-# combined_handles = (
-#     [distance_heading]
-#     + distance_handles
-#     + [method_heading]
-#     + method_handles
-# )
-
-# legend = ax.legend(
-#     handles=combined_handles,
-#     loc="upper left",
-#     bbox_to_anchor=(1.02, 1.0),   # outside, to the right
-#     borderaxespad=0,
-#     fontsize=13,
-#     handlelength=1,
-#     labelspacing=0.5,
-#     frameon=True,
-# )
-
-# # Make the two section headings bold
-# legend_texts = legend.get_texts()
-# legend_texts[0].set_weight("bold")
-# legend_texts[len(distance_handles) + 1].set_weight("bold")
-
-# # Reserve space on the right for the legend
-# fig.subplots_adjust(right=0.72)
+# #     fig.tight_layout()
 
 
-# fig.tight_layout()
-
-# # fig.savefig(
-# #     os.path.join(dr, f"{a}_support.pdf"),
-# #     dpi=800,
-# #     bbox_inches="tight",
-# # )
-
-
-# num_shots = 1000
-# for method, method_df in out_df.groupby("method"):
+# # # num_shots = 1000
+# for method in methods:
 #     fig, ax = plt.subplots(figsize=(7, 5))
+#     for dist, distance_df in out_df.groupby("Distance"):
+#         success_col = method + " success"
 
-#     # ax = fig.add_axes([0.10, 0.15, 0.58, 0.75])
+#         distance_df[success_col] = pd.to_numeric(distance_df[success_col].replace({"True": 1, "False": 0}), errors="coerce")
+#         # distance_df[success_col] = distance_df[success_col].astype(int)
+#         # distance_df = (distance_df.groupby("Loss probability", as_index=False).agg(
+#         #     success_mean=(success_col, "mean"),
+#         #     sample_count=(success_col, "count"),).sort_values("Loss probability"))
+#         # num_shots = 1000   # or 2000
 
-#     for dist, distance_df in method_df.groupby("distance"):
-#         distance_df = distance_df.sort_values("loss_prob")
+#         # distance_df = (
+#         #     distance_df.groupby("Loss probability", group_keys=False)
+#         #     .apply(lambda x: x.sample(n=min(len(x), num_shots)))
+#         # )
 
-#         distance_df["teleportation_rate_error"] = np.sqrt(
-#             distance_df["teleportation_rate"]
-#             * (1 - distance_df["teleportation_rate"])
-#             / num_shots
+#         distance_df = (
+#             distance_df.groupby("Loss probability", as_index=False)
+#             .agg(
+#                 success_mean=(success_col, "mean"),
+#                 sample_count=(success_col, "count"),
+#             )
+#             .sort_values("Loss probability")
 #         )
-#         distance_df = distance_df.sort_values("loss_prob")
+#         distance_df[method + " yerr"] = np.sqrt( distance_df["success_mean"] *
+#                                             (1 - distance_df["success_mean"])
+#                                             / distance_df["sample_count"])
 
 #         ax.errorbar(
-#             distance_df["loss_prob"],
-#             distance_df["teleportation_rate"],
-#             yerr=distance_df["teleportation_rate_error"],
+#             distance_df["Loss probability"],
+#             distance_df["success_mean"],
+#             yerr=distance_df[method + " yerr"],
 #             marker="o",
 #             label=str(dist),
 #         )
@@ -335,26 +324,139 @@ print(out_df1)
 #     ax.set_title(f"Method used: {method}", fontsize=fs)
 #     ax.set_xlabel("Loss probability", fontsize=fs)
 #     ax.set_ylabel("Teleportation rate", fontsize=fs)
-
 #     # ax.set_yscale("log")
 #     ax.grid(True, which="both", alpha=0.3)
-
 #     ax.tick_params(axis="both", labelsize=fs)
-#     ax.legend(
-#         title="Distance",
-#         fontsize=13,
-#         title_fontsize=fs,
-#         handlelength=1.3,
-#         labelspacing=0.3,
-#     )
+#     ax.legend(title="Distance", fontsize=13, title_fontsize=fs, handlelength=1.3, labelspacing=0.3,)
 
 #     fig.tight_layout()
 
-#     # fig.savefig(
-#     #     os.path.join(dr, f"{a}_Threshold_{method}.pdf"),
-#     #     dpi=800,
-#     #     bbox_inches="tight",
-#     # )
+#     # fig.savefig(os.path.join(dr, f"Threshold_{method}.pdf"), dpi=800, bbox_inches="tight")
 
 
-# plt.show()
+# # plt.show()
+# fig, ax = plt.subplots(figsize=(7, 5))
+
+# for i, method in enumerate(methods):
+#     if i >0:
+#         continue
+#     for dist, distance_df in out_df.groupby("Distance"):
+#         success_col = method + " success"
+
+#         distance_df[success_col] = pd.to_numeric(distance_df[success_col].replace({"True": 1, "False": 0}), errors="coerce")
+#         # distance_df[success_col] = distance_df[success_col].astype(int)
+
+#         # distance_df = (
+#         #     distance_df.groupby("Loss probability", group_keys=False)
+#         #     .apply(lambda x: x.sample(n=min(len(x), num_shots), random_state=1)))
+
+#         distance_df = (distance_df.groupby("Loss probability", as_index=False).agg(
+#             success_mean=(success_col, "mean"),
+#             sample_count=(success_col, "count"),).sort_values("Loss probability"))
+
+#         ax.plot(
+#             distance_df["Loss probability"],
+#             distance_df["sample_count"],
+#             marker="o",
+#             label=str(dist),
+#         )
+
+#     ax.set_title(f"Method used: {method}", fontsize=fs)
+#     ax.set_xlabel("Loss probability", fontsize=fs)
+#     ax.set_ylabel("Count", fontsize=fs)
+#     # ax.set_yscale("log")
+#     ax.grid(True, which="both", alpha=0.3)
+#     ax.tick_params(axis="both", labelsize=fs)
+#     ax.legend(title="Distance", fontsize=13, title_fontsize=fs, handlelength=1.3, labelspacing=0.3,)
+
+#     fig.tight_layout()
+
+
+# # # print(out_df.keys())
+
+# # for dist, distance_df in out_df.groupby("Distance"):
+# #     distance_df = distance_df[np.isclose(distance_df["Loss probability"], 0.55)]
+# #     plt.figure()
+# #     plt.title(f"Runtime for {dist}")
+# #     plt.hist(distance_df["g-SPF runtime"], bins=30)
+# #     plt.xlabel("g-SPF runtime")
+# #     plt.ylabel("Number of occurrences")
+
+
+# for dist, distance_df in out_df.groupby("Distance"):
+
+#     probabilities = np.sort(distance_df["Loss probability"].round(2).unique())
+#     runtime_edges = np.histogram_bin_edges(
+#         distance_df["g-SPF runtime"].dropna(),
+#         bins=30,
+#     )
+
+#     histogram_matrix = []
+
+#     for probability in probabilities:
+#         runtimes = distance_df.loc[
+#             np.isclose(distance_df["Loss probability"], probability),
+#             "g-SPF runtime",
+#         ]
+
+#         counts, _ = np.histogram(runtimes, bins=runtime_edges)
+#         histogram_matrix.append(counts)
+
+#     histogram_matrix = np.array(histogram_matrix).T
+
+#     plt.figure()
+#     plt.imshow(
+#     histogram_matrix,
+#     aspect="auto",
+#     origin="lower",
+#     extent=[
+#         probabilities.min(),
+#         probabilities.max(),
+#         runtime_edges.min(),
+#         runtime_edges.max(),
+#     ],
+# )
+#     plt.xlabel("Loss probability")
+#     plt.ylabel("g-SPF runtime")
+#     plt.title(f"Distance = {dist}")
+#     plt.colorbar(label="Number of occurrences")
+
+probability = 0.05
+
+fig, ax = plt.subplots(figsize=(8.5, 5))
+
+plot_df = out_df[
+    np.isclose(out_df["Loss probability"], probability)
+].copy()
+
+for method in methods:
+    col = method + " runtime"
+    plot_df[col] = pd.to_numeric(plot_df[col], errors="coerce")
+
+plot_df = (
+    plot_df.groupby("Distance", as_index=False)[
+        [method + " runtime" for method in methods]
+    ]
+    .mean()
+)
+
+plot_df["Distance"] = 2*plot_df["Distance"] ** 2-2*plot_df["Distance"]+1
+
+for j, method in enumerate(methods):
+    ax.plot(
+        plot_df["Distance"],
+        plot_df[method + " runtime"],
+        marker=markers[j],
+        linestyle=linestyles[j],
+        label=method,
+    )
+
+ax.set_xlabel("Distance")
+ax.set_ylabel("Runtime")
+ax.set_yscale("log")
+ax.set_title(f"Loss probability = {probability}")
+ax.grid()
+ax.legend()
+
+
+plt.show()

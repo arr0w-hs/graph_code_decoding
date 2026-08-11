@@ -102,6 +102,8 @@ def qubit_wise_commutation(a1, a2):
     returns 0 if they commute, otherwise
     """
     # score = 0
+    if a1 is None or a2 is None:
+        return None
     anticom_loc = []
 
     x1, z1 = np.hsplit(np.array(a1), 2)
