@@ -15,7 +15,6 @@ from gspf_tests import test_gspf
 
 def sample_lost_masks(num_qubits, p, num_shots=1, exclude=None, rng=None):
     rng = np.random.default_rng(rng)
-    # independent Bernoulli(p) loss per qubit
     lost_masks = rng.random(size=(num_shots, num_qubits)) < p
     if exclude is not None:
         lost_masks[:, exclude] = False
@@ -23,21 +22,99 @@ def sample_lost_masks(num_qubits, p, num_shots=1, exclude=None, rng=None):
 
 
 # ---------------------------------------------------------------------------
-# crash-safe CSV writer: write to a temp file then atomically rename over the
-# real file. A kill mid-write can never leave a half-written CSV -- you get
-# either the previous complete file or the new complete file. Called after
-# every shot, so at most one shot's work is ever at risk.
+# crash-safe CSV writer: temp file then atomic rename.
 # ---------------------------------------------------------------------------
 def _atomic_write_csv(out_dict, output_path):
     lengths = {k: len(v) for k, v in out_dict.items()}
-    if len(set(lengths.values())) > 1:                       # ragged-column guard
+    if len(set(lengths.values())) > 1:
         raise RuntimeError(f"ragged columns, refusing to write: {lengths}")
     tmp = output_path.with_suffix(output_path.suffix + ".tmp")
     with tmp.open("w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
         writer.writerow(out_dict.keys())
         writer.writerows(zip(*out_dict.values()))
-    tmp.replace(output_path)                                 # atomic rename
+    tmp.replace(output_path)
+
+
+def _atomic_write_rows(rows, columns, path):
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    with tmp.open("w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=columns, extrasaction="ignore")
+        writer.writeheader()
+        for r in rows:
+            writer.writerow(r)
+    tmp.replace(path)
+
+
+# ---------------------------------------------------------------------------
+# Two separate caches of found logical pairs, each keyed on (BB-type, support)
+# so a given support is stored once per cache:
+#   * heuristic cache  -- pairs found by the heuristic
+#   * exact cache      -- pairs found by g-SPF or ILP; carries a
+#                         'guaranteed minimum' marker that is True only when the
+#                         solver returned status OPTIMAL. If the ILP capped out
+#                         (returned FEASIBLE but not proven optimal), the marker
+#                         is False. If a later exact solve proves the same
+#                         support optimal, the existing entry is upgraded.
+# ---------------------------------------------------------------------------
+HEUR_CACHE_COLUMNS = ["BB-type", "support", "support size", "found by",
+                      "X logical", "Z logical"]
+EXACT_CACHE_COLUMNS = ["BB-type", "support", "support size", "found by",
+                       "status", "guaranteed minimum", "X logical", "Z logical"]
+
+
+def cache_add_heuristic(store, x, z, target_qubit, lm_tuple):
+    """store: dict with 'keys' (set) and 'rows' (list). Adds if support new."""
+    if x is None or z is None:
+        return
+    supp = sc.pair_support(x, z, target_qubit)
+    if supp is None:
+        return
+    key = (lm_tuple, supp)
+    if key in store["keys"]:
+        return
+    store["keys"].add(key)
+    store["rows"].append({
+        "BB-type": lm_tuple,
+        "support": sorted(int(q) for q in supp),
+        "support size": len(supp),
+        "found by": "Heuristic",
+        "X logical": ta.tableau2paulistring(x),
+        "Z logical": ta.tableau2paulistring(z),
+    })
+
+
+def cache_add_exact(store, x, z, target_qubit, lm_tuple, source, status_name):
+    """store: dict with 'keys' (dict key->row index) and 'rows' (list).
+    guaranteed minimum := (status_name == 'OPTIMAL'). If the support is already
+    cached but this solve proves optimality and the old one didn't, upgrade the
+    existing row's marker."""
+    if x is None or z is None:
+        return
+    supp = sc.pair_support(x, z, target_qubit)
+    if supp is None:
+        return
+    key = (lm_tuple, supp)
+    guaranteed = (status_name == "OPTIMAL")
+    if key in store["keys"]:
+        idx = store["keys"][key]
+        old = store["rows"][idx]
+        if guaranteed and not old["guaranteed minimum"]:
+            old["guaranteed minimum"] = True
+            old["status"] = status_name
+            old["found by"] = source
+        return
+    store["keys"][key] = len(store["rows"])
+    store["rows"].append({
+        "BB-type": lm_tuple,
+        "support": sorted(int(q) for q in supp),
+        "support size": len(supp),
+        "found by": source,
+        "status": status_name,
+        "guaranteed minimum": guaranteed,
+        "X logical": ta.tableau2paulistring(x),
+        "Z logical": ta.tableau2paulistring(z),
+    })
 
 
 def _blank_row(columns):
@@ -45,13 +122,11 @@ def _blank_row(columns):
 
 
 def _append_row(out_dict, row):
-    # every row carries every column (None where unset) so columns never desync
     for k, v in row.items():
         out_dict[k].append(v)
 
 
 def _safe(fn, default=None):
-    """Run fn(); return (result, None) on success, (default, repr(exc)) on error."""
     try:
         return fn(), None
     except Exception as exc:   # noqa: BLE001
@@ -64,10 +139,10 @@ COLUMNS = [
     "Heuristic support size", "Heuristic X logical", "Heuristic Z logical",
     "Heuristic g",
     "g-SPF success", "g-SPF verify", "g-SPF runtime", "g-SPF support size",
-    "g-SPF X logical", "g-SPF Z logical", "early flag", "early runtime",
-    "g-SPF g",
+    "g-SPF X logical", "g-SPF Z logical", "g-SPF status", "early flag",
+    "early runtime", "g-SPF g",
     "ILP success", "ILP verify", "ILP runtime", "ILP support size",
-    "ILP X logical", "ILP Z logical", "ILP g",
+    "ILP X logical", "ILP Z logical", "ILP status", "ILP g",
     "error",
 ]
 
@@ -84,17 +159,21 @@ bb_tuples = [(3, 3), (3, 6), (6, 6), (9, 6), (6, 12), (12, 6), (12, 12)]
 code = "bb"
 num_shots = 10
 gg = 3
-lost_prob = np.linspace(0, 0.2, 5)   # loss grid (BB: keep low; NOT linspace(0,1,1))
+lost_prob = np.linspace(0, 0.2, 5)
 ms = True
 target_qubit = None
 # ---------------------------------------------------------------------------- #
 
 out_dict = defaultdict(list)
-output_path = data_directory / f"{time_str}_{code}_thres_min_{ms}_{gg}.csv"
+output_path     = data_directory / f"{time_str}_{code}_thres_min_{ms}_{gg}.csv"
+heur_cache_path = data_directory / f"{time_str}_{code}_cache_heuristic_{gg}.csv"
+exact_cache_path= data_directory / f"{time_str}_{code}_cache_exact_{gg}.csv"
+
+heur_cache  = {"keys": set(),  "rows": []}
+exact_cache = {"keys": {},     "rows": []}
 
 for lm_tuple in bb_tuples[:1]:
     seen = set()
-    cache = []
     _, _, H, _, _ = bb_tableau(lm_tuple)
     T = ta.to_gf2_tableau(H)
     num_qubits = T.shape[1] // 2
@@ -138,6 +217,7 @@ for lm_tuple in bb_tuples[:1]:
                 row["Heuristic Z logical"] = ta.tableau2paulistring(res_heu["z"])
                 a = ta.qubit_wise_commutation(res_heu["x"], res_heu["z"])
                 row["Heuristic g"] = len(a) if a is not None else None
+                cache_add_heuristic(heur_cache, res_heu["x"], res_heu["z"], target_qubit, lm_tuple)
             else:
                 row["Heuristic success"] = False
 
@@ -145,13 +225,14 @@ for lm_tuple in bb_tuples[:1]:
             def _gspf():
                 return generalised_spf_logical(T, [], lq, gg, target_qubit=target_qubit, minimise_support=ms)
             t2 = time.time()
-            out, err = _safe(_gspf, default=({"success": False, "x": None, "z": None}, None, None))
+            out, err = _safe(_gspf, default=({"success": False, "x": None, "z": None, "status_name": None}, None, None))
             row["g-SPF runtime"] = time.time() - t2
             if err:
                 errors.append("gspf:" + err)
             res_gspf, ea_flag, rt_early = out
             row["early flag"] = ea_flag
             row["early runtime"] = rt_early
+            row["g-SPF status"] = res_gspf.get("status_name")
             if res_gspf.get("success"):
                 row["g-SPF success"] = res_gspf["success"]
                 row["g-SPF support size"] = sc.pair_support(res_gspf["x"], res_gspf["z"], target_qubit, size=True)
@@ -163,20 +244,22 @@ for lm_tuple in bb_tuples[:1]:
                 row["g-SPF Z logical"] = ta.tableau2paulistring(res_gspf["z"])
                 a = ta.qubit_wise_commutation(res_gspf["x"], res_gspf["z"])
                 row["g-SPF g"] = len(a) if a is not None else None
+                cache_add_exact(exact_cache, res_gspf["x"], res_gspf["z"], target_qubit,
+                                lm_tuple, "g-SPF", res_gspf.get("status_name"))
             else:
                 row["g-SPF success"] = False
 
             # --- raw ILP ---
             def _ilp():
                 Tg = ta.to_gf2_tableau(T)
-                # needs initialise_logical_basis for k>1 so xlogi,zlogi anti-commute
                 _, xlogi, zlogi = sc.initialise_logical_basis(Tg)
                 return gspf_ilp(Tg, xlogi, zlogi, [], lq, gg, target_qubit=target_qubit, minimise_support=ms)
             t3 = time.time()
-            res_ilp, err = _safe(_ilp, default={"success": False, "x": None, "z": None})
+            res_ilp, err = _safe(_ilp, default={"success": False, "x": None, "z": None, "status_name": None})
             row["ILP runtime"] = time.time() - t3
             if err:
                 errors.append("ilp:" + err)
+            row["ILP status"] = res_ilp.get("status_name")
             if res_ilp.get("success"):
                 row["ILP success"] = res_ilp["success"]
                 row["ILP support size"] = sc.pair_support(res_ilp["x"], res_ilp["z"], target_qubit, size=True)
@@ -188,16 +271,24 @@ for lm_tuple in bb_tuples[:1]:
                 row["ILP Z logical"] = ta.tableau2paulistring(res_ilp["z"])
                 a = ta.qubit_wise_commutation(res_ilp["x"], res_ilp["z"])
                 row["ILP g"] = len(a) if a is not None else None
-                supp = sc.pair_support(res_ilp["x"], res_ilp["z"], target_qubit)
-                if supp is not None and supp not in cache:
-                    cache.append(supp)
+                cache_add_exact(exact_cache, res_ilp["x"], res_ilp["z"], target_qubit,
+                                lm_tuple, "ILP", res_ilp.get("status_name"))
             else:
                 row["ILP success"] = False
 
             row["error"] = "; ".join(errors) if errors else None
 
-            # atomic append + checkpoint write after EVERY shot
+            # atomic append + checkpoint all three files after EVERY shot
             _append_row(out_dict, row)
             _atomic_write_csv(out_dict, output_path)
+            _atomic_write_rows(heur_cache["rows"], HEUR_CACHE_COLUMNS, heur_cache_path)
+            _atomic_write_rows(exact_cache["rows"], EXACT_CACHE_COLUMNS, exact_cache_path)
 
-print("done. rows:", len(out_dict["BB-type"]), "-> file:", output_path)
+n_exact_capped = sum(1 for r in exact_cache["rows"] if not r["guaranteed minimum"])
+print("done. rows:", len(out_dict["BB-type"]))
+print("heuristic cache pairs:", len(heur_cache["rows"]))
+print("exact cache pairs:", len(exact_cache["rows"]),
+      f"({n_exact_capped} not guaranteed minimum / capped)")
+print("results ->", output_path)
+print("heur cache ->", heur_cache_path)
+print("exact cache ->", exact_cache_path)
