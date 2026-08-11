@@ -9,9 +9,10 @@ import pandas as pd
 from generalised_spf import generalised_spf_logical, gspf_ilp ,generalised_spf_logical_heuristic
 import stabiliser_code as sc
 import tableau as ta
-from code_importer import rotated_surface_code, surface_code
+from code_importer import rotated_surface_code, surface_code,bb_tableau
 from collections import defaultdict
 from gspf_tests import test_gspf
+
 
 
 def sample_lost_masks(num_qubits, p, num_shots = 1, exclude=None, rng=None):
@@ -28,42 +29,45 @@ def sample_lost_masks(num_qubits, p, num_shots = 1, exclude=None, rng=None):
 
     return lost_masks
 
-
+#----------------------------------------------------PARAMETERS----------------------------------------------------------------------------------#
 ts = pd.Timestamp.now(tz="Europe/Stockholm")
 date_str = ts.strftime("%Y-%m-%d")
 time_str = ts.strftime("%H%M%S")
 base_dir = Path(__file__).resolve().parent if "__file__" in globals() else Path.cwd()
 data_directory = base_dir / "threshold_folder" / f"{date_str}"
 data_directory.mkdir(parents=True, exist_ok=True)
-
-
-
+bb_tuples=[(3,3), (3,6),(6,6),(9, 6),(6,12),(12,6),(12,12)]
 m = ["Heuristic" ,"g-SPF" ,"ILP"]
 m = ["Heuristic" ,"g-SPF" ,"ILP"]
 # m = ['Heuristic']
 code = "sc"
 
-num_shots = 5
-gg = 1
-lost_prob = np.linspace(0,1,0)
+num_shots = 10
+gg = 3
+lost_prob = np.linspace(0,1,1)
 # print(list(lost_prob))
 # lost_prob = [0.0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5,
 #             0.55, 0.6000000000000001, 0.65, 0.7000000000000001,
 #             0.75, 0.8, 0.8500000000000001, 0.9, 0.9500000000000001, 1.0]
 
 # lost_prob = [0.05]
+#----------------------------------------------------PARAMETERS----------------------------------------------------------------------------------#
+
+
+
 ms = True
 out_dict = defaultdict(list)
-for i in [3,5, 7,9]:
+for lm_tuple in bb_tuples[:1]:
     seen = set()
     cache = []
     fail_list = []
-    _,_,H,xlogi, zlogi = surface_code(i)
-    T = GF2(H)
+    _,_,H,_,_ = bb_tableau(lm_tuple)
+    T = ta.to_gf2_tableau(H)
     target_qubit = None
     num_qubits=T.shape[1]//2
-    print(num_qubits)
+    print('number of physical qubits: ',num_qubits)
     for p in lost_prob:
+        print('p: ',p)
         support_list = []
         # hits = 0
         # solves = 0
@@ -72,6 +76,8 @@ for i in [3,5, 7,9]:
         lost_mask = sample_lost_masks(num_qubits, p, int(10*num_shots), exclude=target_qubit)
 
         for shot in range(num_shots):
+
+            print("shot: ",shot)
 
             lq = np.flatnonzero(lost_mask[shot])
             lost_set = frozenset(int(c) for c in lq)
@@ -93,13 +99,13 @@ for i in [3,5, 7,9]:
             #     continue
 
             # solves += 1
-            out_dict["Distance"].append(i)
+            out_dict["BB-type"].append(lm_tuple)
             out_dict['Loss probability'].append(p)
             out_dict["Shot number"].append(shot)
             out_dict['lost_qubits'].append(lost_set)
 
             t1 = time.time()
-            res_heu = generalised_spf_logical_heuristic(T, lq, target_qubit=target_qubit) # this assumes no meas have happened
+            res_heu = generalised_spf_logical_heuristic(T, lq, gg,target_qubit=target_qubit) # this assumes no meas have happened
             rt_heu = (time.time()-t1)
             supp = sc.pair_support(res_heu["x"], res_heu["z"], target_qubit, size=True)
             test = test_gspf(T, res_heu["x"], res_heu["z"], [], lq, g =gg)
@@ -137,10 +143,10 @@ for i in [3,5, 7,9]:
 
 
             t3 = time.time()
-            T = GF2(T)
-            _,_,logicals = sc.find_logical_op_basis(T, num_qubits)
-            xlogi = ta.to_gf2_tableau(logicals[0])
-            zlogi = ta.to_gf2_tableau(logicals[1])
+            T = ta.to_gf2_tableau(T) #is this necessary?
+            _,xlogi,zlogi = sc.initialise_logical_basis(T) #needs to call this function for more than one qubits, otherwise
+            # it is not guaranteed that xlogi and zlogic anti-commute
+
             res_ilp = gspf_ilp(T, xlogi, zlogi, [], lq, gg, target_qubit=target_qubit, minimise_support=ms)
             rt_ilp = (time.time()-t3)
             supp = sc.pair_support(res_ilp["x"], res_ilp["z"], target_qubit, size=True)
@@ -162,8 +168,9 @@ for i in [3,5, 7,9]:
             if supp is not None and supp not in cache:
                 cache.append(supp)
 
-            output_path = data_directory / f"{time_str}_{code}_thres_min_{ms}_{gg}.csv"
-            with output_path.open("w", newline="", encoding="utf-8") as f:
-                writer = csv.writer(f)
-                writer.writerow(out_dict.keys())
-                writer.writerows(zip(*out_dict.values()))
+output_path = data_directory / f"{time_str}_{code}_thres_min_{ms}_{gg}.csv"
+with output_path.open("w", newline="", encoding="utf-8") as f:
+    print('writing')
+    writer = csv.writer(f)
+    writer.writerow(out_dict.keys())
+    writer.writerows(zip(*out_dict.values()))

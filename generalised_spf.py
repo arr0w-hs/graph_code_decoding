@@ -274,21 +274,6 @@ def unravel_symplectic_basis(symplectic_basis):
     return basis_elements
 
 
-def initialise_logical_basis(tableau: np.ndarray,logical_qubit:int=0):
-
-    T = ta.to_gf2_tableau(tableau) # this also catches if T is a string
-    num_qubits = T.shape[1]//2
-    _, _, logicals = sc.find_logical_op_basis(T,num_qubits)
-
-    #turn into symplectic basis
-    symplectic_basis = ta.symplectic_basis(logicals)
-
-    xlogical, zlogical = symplectic_basis[logical_qubit] # initialise_logical_basis gives back a tuple
-    xlogical = ta.to_gf2_tableau(xlogical)
-    zlogical = ta.to_gf2_tableau(zlogical) # arbitrary designations
-
-    return T, xlogical, zlogical
-
 
 def update_T_and_logi_after_loss(T : np.ndarray, logicals : list, lost_qubits : list,reduce:bool=False):
 
@@ -430,7 +415,7 @@ def generalised_spf_logical(tableau : np.ndarray,
     assert all(0 <= x <= num_qubits-1 for x in lost_qubits), f"Lost qubits can only contain qubits indices from 0 to {num_qubits-1}"
     assert g >= 1, "g must be at least 1"
 
-    T, xlogical, zlogical = initialise_logical_basis(T,logical_qubit=logical_qubit)
+    T, xlogical, zlogical = sc.initialise_logical_basis(T,logical_qubit=logical_qubit)
 
     res_update = update_T_and_logi_after_loss(T, [xlogical, zlogical], lost_qubits)
     T_reduced, xlogical_reduced, zlogical_reduced, indices, success = res_update

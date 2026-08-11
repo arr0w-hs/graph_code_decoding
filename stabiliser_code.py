@@ -178,7 +178,7 @@ def find_ker_minus_rowspace(M, CSS: bool = False):
             basis = stacked                    # keep it in the accumulator
             current_rank = new_rank
 
-    return ker_minus_rowspace
+    return ker_minus_rowspace #returns linearly independent logicals
 
 
 def overlap_with_lost_qubits(T,lost_qubits):
@@ -497,7 +497,7 @@ def add_measurements_to_tableau(T,measurements):
 
 def find_logical_op_basis(tableau_matrix,n_qubits,CSS:bool=False):
 
-    T = GF2(tableau_matrix)      # numpy array of 0/1
+    T = ta.to_gf2_tableau(tableau_matrix)     # numpy array of 0/1
 
     if CSS: #convention: T=((H_x,0),(0,H_z))
         T_x=T[:n_qubits,:n_qubits]
@@ -520,6 +520,22 @@ def find_logical_op_basis(tableau_matrix,n_qubits,CSS:bool=False):
         logicals=find_ker_minus_rowspace(T,CSS=CSS) #TODO check if working correctly
 
         return None,None,logicals
+
+
+def initialise_logical_basis(tableau: np.ndarray,logical_qubit:int=0):
+
+    T = ta.to_gf2_tableau(tableau) # this also catches if T is a string
+    num_qubits = T.shape[1]//2
+    _, _, logicals = find_logical_op_basis(T,num_qubits)
+
+    #turn into symplectic basis
+    symplectic_basis = ta.symplectic_basis(logicals)
+
+    xlogical, zlogical = symplectic_basis[logical_qubit] # initialise_logical_basis gives back a tuple
+    xlogical = ta.to_gf2_tableau(xlogical)
+    zlogical = ta.to_gf2_tableau(zlogical) # arbitrary designations
+
+    return T, xlogical, zlogical
 
 
 
