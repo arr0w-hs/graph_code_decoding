@@ -274,7 +274,7 @@ def unravel_symplectic_basis(symplectic_basis):
     return basis_elements
 
 
-def initialise_logical_basis(tableau: np.ndarray):
+def initialise_logical_basis(tableau: np.ndarray,logical_qubit:int=0):
 
     T = ta.to_gf2_tableau(tableau) # this also catches if T is a string
     num_qubits = T.shape[1]//2
@@ -283,7 +283,7 @@ def initialise_logical_basis(tableau: np.ndarray):
     #turn into symplectic basis
     symplectic_basis = ta.symplectic_basis(logicals)
 
-    xlogical, zlogical = symplectic_basis[0] # initialise_logical_basis gives back a tuple
+    xlogical, zlogical = symplectic_basis[logical_qubit] # initialise_logical_basis gives back a tuple
     xlogical = ta.to_gf2_tableau(xlogical)
     zlogical = ta.to_gf2_tableau(zlogical) # arbitrary designations
 
@@ -359,7 +359,7 @@ def generalised_spf_logical(tableau : np.ndarray,
                     target_qubit:int = None,
                     correct_for_lost_indices:bool=True,
                     max_time:float = 600,
-                    minimise_support:bool=True):
+                    minimise_support:bool=True,logical_qubit:int=0):
     """
     Find a logical satisfying g-SPF algebra of GF2.
 
@@ -391,6 +391,11 @@ def generalised_spf_logical(tableau : np.ndarray,
         Default is True, where we minimise the support of X and Z logicals.
         Can be set to False so that we only find any two logicals that
         satify the constraints.
+
+    logical_qubit: int
+            Which of the logical qubits to choose from, by default 0
+            order determined by symplectic basis, cannot be chosen before hand
+            if you want specific logicals to be passed, code needs to be adapted
 
     Returns
     -------
@@ -425,7 +430,7 @@ def generalised_spf_logical(tableau : np.ndarray,
     assert all(0 <= x <= num_qubits-1 for x in lost_qubits), f"Lost qubits can only contain qubits indices from 0 to {num_qubits-1}"
     assert g >= 1, "g must be at least 1"
 
-    T, xlogical, zlogical = initialise_logical_basis(T)
+    T, xlogical, zlogical = initialise_logical_basis(T,logical_qubit=logical_qubit)
 
     res_update = update_T_and_logi_after_loss(T, [xlogical, zlogical], lost_qubits)
     T_reduced, xlogical_reduced, zlogical_reduced, indices, success = res_update
@@ -461,7 +466,10 @@ def generalised_spf_logical(tableau : np.ndarray,
 def generalised_spf_logical_heuristic(tableau, lost_qubits: list,g:int,
                     target_qubit: int = None,anti_commut_iter: int = 10,
                     correct_for_lost_indices: bool = True,
-                    max_iter: int = 100,row_reduce:bool=False):
+                    max_iter: int = 100,row_reduce:bool=False,logical_qubit:int=0):
+    #logical_qubit: which of the logical qubits to choose from, by default 0
+    # order determined by symplectic basis, cannot be chosen before hand
+    #if you want specific logicals to be passed, code needs to be adapted
     
     result = {
         "success": False,
@@ -493,17 +501,15 @@ def generalised_spf_logical_heuristic(tableau, lost_qubits: list,g:int,
  
 
     # --- k>1 fix: pick ONE conjugate pair before cleaning ---
-    sym = ta.symplectic_basis(logical_ops)          # already k-agnostic
-    X0, Z0 = sym[0]                                  # a genuine anticommuting pair
+    sym = ta.symplectic_basis(logical_ops)          # already k-agnostic , sym is a list of tuples [(X_0,Z_0),(X_1,Z_1),...(X_k,Z_k)]
+    assert len(sym) == T.shape[1]//2-T.shape[0], \
+        f"Expected {T.shape[1]//2-T.shape[0]} logical qubit, got {len(sym)}"""
+    
+    X0, Z0 = sym[logical_qubit]                                  # a genuine anticommuting pair
     X0 = ta.to_gf2_tableau(X0).ravel()
     Z0 = ta.to_gf2_tableau(Z0).ravel()
 
     T_clean, logi_commute_clean, logi_anticommute_clean, indices, success = update_T_and_logi_after_loss(T, [X0, Z0], lost_qubits, reduce=row_reduce)
-
-    """assert len(logical_ops) == 2, \
-        f"Expected one logical qubit, got {len(logical_ops)//2}"""
-  
-    #T_clean, logi_commute_clean, logi_anticommute_clean, indices, success=update_T_and_logi_after_loss(T,logical_ops,lost_qubits,reduce=row_reduce)
     
     if not success:
         print('could not clean logical')
@@ -530,7 +536,8 @@ def generalised_spf_logical_heuristic(tableau, lost_qubits: list,g:int,
  
     Z_logical_qubit = ta.to_gf2_tableau(logi_anticommute_clean).ravel()
    
-    additional_logicals=[]
+    additional_logicals=[] #note for k>1 at the start this will include old surviving logicals, 
+    #one could maybe make this less redundant, not sure what is faster
 
     if num_logical_qubits_remain>1:
 

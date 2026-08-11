@@ -59,14 +59,14 @@ SIZE_FOR_PROB_PLOT = None    # prob-axis plot uses this (w, ell); None -> larges
 #   (readout) qubit of each size; that qubit's node is protected from loss.
 #   int -> a fixed target qubit index; that qubit's node is protected.
 TARGET_QUBIT   = None
-G              = 3# the g in g-SPF
+G              = 5# the g in g-SPF
 MINIMISE_SUPPORT = True # keep True: this is where the ILP pays its cost
 CACHE_LOGICAL_BASIS = True  # compute the full-T logical basis once per size
                             # and reuse it across trials (both solvers)
 FAMILY = "bivariate_bicycle"
 #SIZES  = [(6, 6), (6, 12),(12,12)]    # n = 72, 144, 288
 #SIZES  = [(6, 6), (9, 6),(6,12)]  #(9,6) strictly speaking not the same code family
-SIZES = [(3,3), (3,6),(6,6)] 
+SIZES = [(3,3), (3,6),(6,6),(9, 6),(6,12)] 
 #   TARGET_QUBIT = None      # REQUIRED: BB is k=12; target path is k=1-only
 
 PROBS = [0.05, 0.10]     #  keep p low so logicals survive (high p -> mass failure, meaningless timing)
