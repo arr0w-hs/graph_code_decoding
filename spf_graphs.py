@@ -228,7 +228,7 @@ if __name__ == "__main__":
     plt.figure()
 
     for i in [2,3,4]:
-        g = triangular_lattice(i,i)
+        g = crazy_graph(i,i)
         g = nx.to_numpy_array(g, dtype = np.uint16)
         numq = g.shape[0]-1
         xlogi, zlogi, stabi = create_graph_code(g)
@@ -239,7 +239,7 @@ if __name__ == "__main__":
 
         fail_list = []
         fit = []
-        num_shots = 5_000
+        num_shots = 10
 
         lost_prob = np.linspace(0,1,21)
         for p in lost_prob:

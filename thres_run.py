@@ -41,9 +41,11 @@ m = ["Heuristic" ,"g-SPF" ,"ILP"]
 m = ["Heuristic" ,"g-SPF" ,"ILP"]
 # m = ['Heuristic']
 code = "sc"
+code = "rsc"
+code = "bb"
 
-num_shots = 10
-gg = 3
+num_shots = 1
+gg = 1
 lost_prob = np.linspace(0,1,1)
 # print(list(lost_prob))
 # lost_prob = [0.0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5,
@@ -57,15 +59,26 @@ lost_prob = np.linspace(0,1,1)
 
 ms = True
 out_dict = defaultdict(list)
-for lm_tuple in bb_tuples[:1]:
+# for i in [3,5,]:
+for i in bb_tuples[4:5]:
     seen = set()
     cache = []
     fail_list = []
-    _,_,H,_,_ = bb_tableau(lm_tuple)
+
+    if code == "bb":
+        _,_,H,_,_ = bb_tableau(i)
+
+    elif code == "rsc":
+        _,_,H,_,_ = rotated_surface_code(i)
+    elif code == "sc":
+        _,_,H,_,_ = surface_code(i)
+
     T = ta.to_gf2_tableau(H)
     target_qubit = None
     num_qubits=T.shape[1]//2
-    print('number of physical qubits: ',num_qubits)
+    k = num_qubits - T.shape[0]
+    print(f"number of physical qubits: {num_qubits}")
+    print(f"number of logical qubits: {k}")
     for p in lost_prob:
         print('p: ',p)
         support_list = []
@@ -73,11 +86,11 @@ for lm_tuple in bb_tuples[:1]:
         # solves = 0
         # success = 0
         # num_runs = 0
-        lost_mask = sample_lost_masks(num_qubits, p, int(10*num_shots), exclude=target_qubit)
+        lost_mask = sample_lost_masks(num_qubits, p, int(num_shots), exclude=target_qubit)
 
         for shot in range(num_shots):
 
-            print("shot: ",shot)
+            # print("shot: ",shot)
 
             lq = np.flatnonzero(lost_mask[shot])
             lost_set = frozenset(int(c) for c in lq)
@@ -99,7 +112,10 @@ for lm_tuple in bb_tuples[:1]:
             #     continue
 
             # solves += 1
-            out_dict["BB-type"].append(lm_tuple)
+            if code == "bb":
+                out_dict["BB-type"].append(f"[[{num_qubits}, {k}]]")
+            else:
+                out_dict["Distance"].append(i)
             out_dict['Loss probability'].append(p)
             out_dict["Shot number"].append(shot)
             out_dict['lost_qubits'].append(lost_set)
@@ -107,6 +123,7 @@ for lm_tuple in bb_tuples[:1]:
             t1 = time.time()
             res_heu = generalised_spf_logical_heuristic(T, lq, gg,target_qubit=target_qubit) # this assumes no meas have happened
             rt_heu = (time.time()-t1)
+            print("heu", rt_heu)
             supp = sc.pair_support(res_heu["x"], res_heu["z"], target_qubit, size=True)
             test = test_gspf(T, res_heu["x"], res_heu["z"], [], lq, g =gg)
             out_dict["Heuristic success"].append(res_heu['success'])
@@ -125,6 +142,7 @@ for lm_tuple in bb_tuples[:1]:
             t2 = time.time()
             res_gspf, ea_flag, rt_early = generalised_spf_logical(T, [], lq, gg, target_qubit=target_qubit, minimise_support=ms)
             rt_gspf = (time.time()-t2)
+            print("gsf",rt_gspf)
             supp = sc.pair_support(res_gspf["x"], res_gspf["z"], target_qubit, size=True)
             test = test_gspf(T, res_gspf["x"], res_gspf["z"], [], lq, g =gg)
             out_dict["g-SPF success"].append(res_gspf['success'])
@@ -142,13 +160,14 @@ for lm_tuple in bb_tuples[:1]:
                 out_dict["g-SPF g"].append(a)
 
 
-            t3 = time.time()
             T = ta.to_gf2_tableau(T) #is this necessary?
             _,xlogi,zlogi = sc.initialise_logical_basis(T) #needs to call this function for more than one qubits, otherwise
             # it is not guaranteed that xlogi and zlogic anti-commute
 
+            t3 = time.time()
             res_ilp = gspf_ilp(T, xlogi, zlogi, [], lq, gg, target_qubit=target_qubit, minimise_support=ms)
             rt_ilp = (time.time()-t3)
+            print("ilp",rt_ilp)
             supp = sc.pair_support(res_ilp["x"], res_ilp["z"], target_qubit, size=True)
             test = test_gspf(T, res_ilp["x"], res_ilp["z"], [], lq, g =gg)
             out_dict["ILP success"].append(res_ilp['success'])
@@ -168,9 +187,9 @@ for lm_tuple in bb_tuples[:1]:
             if supp is not None and supp not in cache:
                 cache.append(supp)
 
-output_path = data_directory / f"{time_str}_{code}_thres_min_{ms}_{gg}.csv"
-with output_path.open("w", newline="", encoding="utf-8") as f:
-    print('writing')
-    writer = csv.writer(f)
-    writer.writerow(out_dict.keys())
-    writer.writerows(zip(*out_dict.values()))
+            output_path = data_directory / f"{time_str}_{code}_thres_min_{ms}_{gg}.csv"
+            with output_path.open("w", newline="", encoding="utf-8") as f:
+                # print('writing')
+                writer = csv.writer(f)
+                writer.writerow(out_dict.keys())
+                writer.writerows(zip(*out_dict.values()))

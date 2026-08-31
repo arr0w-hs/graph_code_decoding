@@ -204,22 +204,22 @@ data_directory.mkdir(parents=True, exist_ok=True)
 bb_tuples = [(3, 3), (3, 6), (6, 6), (9, 6), (6, 12), (12, 6), (12, 12)]
 code = "bb"
 num_shots = 10
-gg = 3
-lost_prob = np.linspace(0, 0.2, 5)
+gg = 1
+lost_prob = np.linspace(0, 1, 11)
 ms = True
 target_qubit = None
 MAX_CACHE = 500     # max distinct pairs kept per cache; None = unbounded
 # ---------------------------------------------------------------------------- #
 
 out_dict = defaultdict(list)
-output_path     = data_directory / f"{time_str}_{code}_thres_min_{ms}_{gg}.csv"
-heur_cache_path = data_directory / f"{time_str}_{code}_cache_heuristic_{gg}.csv"
-exact_cache_path= data_directory / f"{time_str}_{code}_cache_exact_{gg}.csv"
+output_path     = data_directory / f"{time_str}_{code}_thres_min_{ms}_{gg}_csafe.csv"
+heur_cache_path = data_directory / f"{time_str}_{code}_cache_heuristic_{gg}_csafe.csv"
+exact_cache_path= data_directory / f"{time_str}_{code}_cache_exact_{gg}_csafe.csv"
 
 heur_cache  = {"keys": set(),  "rows": []}
 exact_cache = {"keys": {},     "rows": []}
 
-for lm_tuple in bb_tuples[:1]:
+for lm_tuple in bb_tuples[:2]:
     seen = set()
     _, _, H, _, _ = bb_tableau(lm_tuple)
     T = ta.to_gf2_tableau(H)
@@ -231,7 +231,7 @@ for lm_tuple in bb_tuples[:1]:
         lost_mask = sample_lost_masks(num_qubits, p, int(10 * num_shots), exclude=target_qubit)
 
         for shot in range(num_shots):
-            print("shot:", shot)
+            # print("shot:", shot)
             lq = np.flatnonzero(lost_mask[shot])
             lost_set = frozenset(int(c) for c in lq)
             if lost_set in seen:

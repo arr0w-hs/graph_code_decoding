@@ -46,7 +46,8 @@ FAMILY = "triangular_lattice"
 #SIZES = [(2, 2), (2, 3), (3, 3), (3, 4), (4, 4), (4, 5), (5, 5)]
 #SIZES=[(3, 0), (5, 0), (7, 0)]
 #SIZES = [(3,3),(4,4),(5,5),(6,6),(7,7)]
-#SIZES = [(2, 2),  (3, 3), (4, 4),  (5, 5),(6,6)]
+SIZES = [(2, 2),  (3, 3), (4, 4),  (5, 5),(6,6)]
+SIZES = [(2, 2),  (3, 3), (4, 4),]
 N_TRIALS       = 50     # random loss patterns per (size, p) cell
 # Loss probability grid. The sweep runs every size at every p, so cost scales as
 # len(SIZES) * len(PROBS) * N_TRIALS. Trim any of the three to shorten it.
@@ -59,17 +60,18 @@ SIZE_FOR_PROB_PLOT = None    # prob-axis plot uses this (w, ell); None -> larges
 #   (readout) qubit of each size; that qubit's node is protected from loss.
 #   int -> a fixed target qubit index; that qubit's node is protected.
 TARGET_QUBIT   = None
-G              = 5# the g in g-SPF
+G              = 1# the g in g-SPF
 MINIMISE_SUPPORT = True # keep True: this is where the ILP pays its cost
 CACHE_LOGICAL_BASIS = True  # compute the full-T logical basis once per size
                             # and reuse it across trials (both solvers)
-FAMILY = "bivariate_bicycle"
-#SIZES  = [(6, 6), (6, 12),(12,12)]    # n = 72, 144, 288
-#SIZES  = [(6, 6), (9, 6),(6,12)]  #(9,6) strictly speaking not the same code family
-SIZES = [(3,3), (3,6),(6,6),(9, 6),(6,12)] 
-#   TARGET_QUBIT = None      # REQUIRED: BB is k=12; target path is k=1-only
+# FAMILY = "bivariate_bicycle"
+# #SIZES  = [(6, 6), (6, 12),(12,12)]    # n = 72, 144, 288
+# #SIZES  = [(6, 6), (9, 6),(6,12)]  #(9,6) strictly speaking not the same code family
+# SIZES = [(3,3), (3,6),(6,6),(9, 6),(6,12)]
+# #   TARGET_QUBIT = None      # REQUIRED: BB is k=12; target path is k=1-only
 
 PROBS = [0.05, 0.10]     #  keep p low so logicals survive (high p -> mass failure, meaningless timing)
+PROBS = np.linspace(0,1,5)
 N_TRIALS = 10
 MAX_TIME = 100        # BB ILP is slow; give it room, but it censors
 CACHE_LOGICAL_BASIS = True
@@ -355,15 +357,15 @@ BB_FAMILY_A = {
     (3, 3): ([('x',3),('y',1),('y',2)], [('y',3),('x',1),('x',2)]),   # n=18, k=8
     (3, 6): ([('x',3),('y',1),('y',2)], [('y',3),('x',1),('x',2)]),   # n=36, k=8
 }
- 
- 
+
+
 def _bb_shift(N):
     S = np.zeros((N, N), dtype=int)
     for i in range(N):
         S[i, (i + 1) % N] = 1
     return S
- 
- 
+
+
 def bb_code_tableau(l, m, A_terms, B_terms):
     """Bivariate bicycle code -> (X|Z) full-rank stabiliser tableau (GF2).
     n = 2*l*m data qubits, weight-6 checks, CSS. k=12 for Family A."""
@@ -485,7 +487,7 @@ def run_benchmark():
         _prime_basis_cache(T, num_qubits)   # full-T basis computed once here
 
         for p in PROBS:
-            
+
             for trial in range(N_TRIALS):
                 # every tableau qubit is lost independently with probability p
                 # (the target qubit, if one is set, is kept out of the sample)
@@ -530,7 +532,7 @@ def run_benchmark():
                       f"  | ratio {ilp_time/heur_time:6.1f}x"
                       if heur_time > 0 else "",
                       flush=True)
-                
+
                 # joint support of the returned (x, z) pair, via pair_support
                 def _supp(res):
                     if not res.get("success"):
@@ -648,23 +650,23 @@ def save_all_data(records, tag=None):
     base = f"gspf_data_{tag}_{stamp}"
 
     # 1. pickle: exact, everything
-    with open(base + ".pkl", "wb") as f:
-        pickle.dump({"config": {
-            "FAMILY": FAMILY, "SIZES": SIZES, "PROBS": PROBS,
-            "N_TRIALS": N_TRIALS, "G": G, "MAX_TIME": MAX_TIME,
-            "MINIMISE_SUPPORT": MINIMISE_SUPPORT, "SEED": SEED,
-            "TARGET_QUBIT": TARGET_QUBIT,
-        }, "records": records}, f)
+    # with open(base + ".pkl", "wb") as f:
+    #     pickle.dump({"config": {
+    #         "FAMILY": FAMILY, "SIZES": SIZES, "PROBS": PROBS,
+    #         "N_TRIALS": N_TRIALS, "G": G, "MAX_TIME": MAX_TIME,
+    #         "MINIMISE_SUPPORT": MINIMISE_SUPPORT, "SEED": SEED,
+    #         "TARGET_QUBIT": TARGET_QUBIT,
+    #     }, "records": records}, f)
 
-    # 2. JSON: drop the nested heur_phases dict's non-JSON bits are fine (all
-    #    ints/floats already); everything here is JSON-serialisable.
-    with open(base + ".json", "w") as f:
-        json.dump({"config": {
-            "FAMILY": FAMILY, "SIZES": [list(s) for s in SIZES],
-            "PROBS": PROBS, "N_TRIALS": N_TRIALS, "G": G,
-            "MAX_TIME": MAX_TIME, "MINIMISE_SUPPORT": MINIMISE_SUPPORT,
-            "SEED": SEED, "TARGET_QUBIT": TARGET_QUBIT,
-        }, "records": records}, f, indent=1)
+    # # 2. JSON: drop the nested heur_phases dict's non-JSON bits are fine (all
+    # #    ints/floats already); everything here is JSON-serialisable.
+    # with open(base + ".json", "w") as f:
+    #     json.dump({"config": {
+    #         "FAMILY": FAMILY, "SIZES": [list(s) for s in SIZES],
+    #         "PROBS": PROBS, "N_TRIALS": N_TRIALS, "G": G,
+    #         "MAX_TIME": MAX_TIME, "MINIMISE_SUPPORT": MINIMISE_SUPPORT,
+    #         "SEED": SEED, "TARGET_QUBIT": TARGET_QUBIT,
+    #     }, "records": records}, f, indent=1)
 
     # 3. CSV: flat scalar columns for quick analysis
     cols = ["width", "length", "num_qubits", "loss_prob", "num_lost", "g",
@@ -1019,10 +1021,10 @@ if __name__ == "__main__":
     print(f"single-thread ILP: {args.single_thread}")
 
     recs = run_benchmark()
-    
-    save_all_data(recs)          
+
+    save_all_data(recs)
     plot_vs_size(recs)
-   
+
     plot_vs_size_all_p(recs)
     plot_support_vs_size(recs)
     plot_vs_prob(recs)

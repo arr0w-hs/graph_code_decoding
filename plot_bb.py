@@ -30,44 +30,14 @@ def mer_edge(ele):
 form = "pdf"
 
 fs = 15
-# data_dir = os.path.join(dir_name, "er_results/2026-01-26_er/")
-# data_dir = os.path.join(dir_name, "er_results/2026-03-27_er/")
-# # data_dir = os.path.join(dir_name, "er_results/2025-12-02_er/")
-# dir_name = os.path.join(dir_name, "er_results/")
-
 dr = os.path.join(dr, "threshold_folder")
 
 a = "minimise"
 a = "no_min"
 
-#  filees = ["114507_sc_thres_2000.csv"]
-# files = ["153813_sc_thres_2000_nomin_True.csv", "001045_sc_thres_2000_nomin_True.csv",
-#          "013821_sc_thres_2000_nomin_True.csv"]
-# files =["153637_sc_thres_2000_nomin.csv", "153730_sc_thres_2000_nomin.csv",
-#         "153720_sc_thres_2000_nomin.csv"]
-
-
-
-# for ele in files:
-#     out_list = []
-#     out_df = pd.read_csv(os.path.join(dir_name, ele))
-#     print(out_df)
-
-
-# dates = ["2026-08-05",
-#         "2026-08-06",
-#         "2026-08-08",
-#         "2026-08-09"]
 
 dates = ["2026-08-31"]
 out_list = []
-
-# skip_d3_files = ["224415_sc_thres_min_True_1.csv",
-#                 "224421_sc_thres_min_True_1.csv",
-#                  "224422_sc_thres_min_True_1.csv",
-#                  "224435_sc_thres_min_True_1.csv",
-#                  "224522_sc_thres_min_True_1.csv",
-#                  ]
 skip_d3_files = ["104748_sc_thres_min_True_3.csv"]
 
 for a in dates:
@@ -86,14 +56,18 @@ for a in dates:
 
     for file in os.listdir(dir_name):
         if file.endswith(".csv") and "True" in file:
-            if "_3" in file:
+            if "_3" in file or "sc" in file or "rsc" in file:
+                continue
+            elif "_cache" in file:
+                continue
+            elif "csafe" in file:
                 continue
 
             df = pd.read_csv(os.path.join(dir_name, file), on_bad_lines="skip", engine="python")
 
             # if file in skip_d3_files:
             if file in skip_d3_files:
-                df = df[pd.to_numeric(df["Distance"], errors="coerce") != 3]
+                df = df[pd.to_numeric(df["BB-type"], errors="coerce") != 3]
 
             out_list.append(df)
 
@@ -121,15 +95,26 @@ linestyles = [":", "--", "-"]
 out_df["Loss probability"] = pd.to_numeric(out_df["Loss probability"], errors="coerce")
 out_df = out_df[out_df["Loss probability"] <= 1]
 
-# print(out_df[pd.to_numeric(out_df["Distance"], errors="coerce").isna()])
-out_df["Distance"] = pd.to_numeric(out_df["Distance"])
-distances = sorted(out_df["Distance"].unique())
+# print(out_df[pd.to_numeric(out_df["BB-type"], errors="coerce").isna()])
+# out_df["BB-type"] = pd.to_numeric(out_df["BB-type"])
+distances = (out_df["BB-type"].unique())
+print(distances)
+# print(df[df["BB-type"].isna()])
+
+print(out_df["BB-type"].isna().sum())
+print(len(out_df))
+
+nan_rows = out_df[out_df["BB-type"].isna()]
+print(len(nan_rows))
+
+# for x in out_df["BB-type"].unique():
+#     print(repr(x), type(x))
 
 for p in plots:
     fig, ax = plt.subplots(figsize=(8.5, 5))
-    # out_df["Distance"] = pd.to_numeric(out_df["Distance"])
-    # distances = sorted(out_df["Distance"].unique())
-    # distances = sorted(out_df["Distance"].unique())
+    # out_df["BB-type"] = pd.to_numeric(out_df["BB-type"])
+    # distances = sorted(out_df["BB-type"].unique())
+    # distances = sorted(out_df["BB-type"].unique())
 
     color_map = {
         distance: plt.cm.tab10(i % 10)
@@ -146,7 +131,7 @@ for p in plots:
         for i, method in enumerate(methods)}
 
 
-    for i, (distance, distance_df) in enumerate(out_df.groupby("Distance")):
+    for i, (distance, distance_df) in enumerate(out_df.groupby("BB-type")):
         distance_df = distance_df.copy()
         # print(distance_df.keys())
         for method in methods:
@@ -219,7 +204,7 @@ for p in plots:
 
     combined_handles = distance_handles + method_handles
     distance_heading = Line2D(
-        [], [], linestyle="None", marker=None, label="Distance")
+        [], [], linestyle="None", marker=None, label="BB-type")
 
     method_heading = Line2D(
         [], [], linestyle="None", marker=None, label="Methods")
@@ -256,14 +241,14 @@ for p in plots:
 
 # # # plt.show()
 # # plots = [" support size"]
-# # df = (out_df[np.isclose(out_df["Loss probability"], 0.6) & (out_df["Distance"] == 7)])
+# # df = (out_df[np.isclose(out_df["Loss probability"], 0.6) & (out_df["BB-type"] == 7)])
 # # print(df["ILP support size"])
 
 # # for p in plots:
 
 # #     fig, ax = plt.subplots(figsize=(8.5, 5))
 
-# #     for i, (distance, distance_df) in enumerate(out_df.groupby("Distance")):
+# #     for i, (distance, distance_df) in enumerate(out_df.groupby("BB-type")):
 # #         if distance != 7:
 # #             continue
 # #         distance_df = distance_df.copy()
@@ -290,7 +275,7 @@ for p in plots:
 # # num_shots = 1000
 for method in methods:
     fig, ax = plt.subplots(figsize=(7, 5))
-    for dist, distance_df in out_df.groupby("Distance"):
+    for dist, distance_df in out_df.groupby("BB-type"):
         success_col = method + " success"
 
         distance_df[success_col] = pd.to_numeric(distance_df[success_col].replace({"True": 1, "False": 0}), errors="coerce")
@@ -331,7 +316,7 @@ for method in methods:
     # ax.set_yscale("log")
     ax.grid(True, which="both", alpha=0.3)
     ax.tick_params(axis="both", labelsize=fs)
-    ax.legend(title="Distance", fontsize=13, title_fontsize=fs, handlelength=1.3, labelspacing=0.3,)
+    ax.legend(title="BB-type", fontsize=13, title_fontsize=fs, handlelength=1.3, labelspacing=0.3,)
 
     fig.tight_layout()
 
@@ -344,7 +329,7 @@ for method in methods:
 # for i, method in enumerate(methods):
 #     if i >0:
 #         continue
-#     for dist, distance_df in out_df.groupby("Distance"):
+#     for dist, distance_df in out_df.groupby("BB-type"):
 #         success_col = method + " success"
 
 #         distance_df[success_col] = pd.to_numeric(distance_df[success_col].replace({"True": 1, "False": 0}), errors="coerce")
@@ -371,14 +356,14 @@ for method in methods:
 #     # ax.set_yscale("log")
 #     ax.grid(True, which="both", alpha=0.3)
 #     ax.tick_params(axis="both", labelsize=fs)
-#     ax.legend(title="Distance", fontsize=13, title_fontsize=fs, handlelength=1.3, labelspacing=0.3,)
+#     ax.legend(title="BB-type", fontsize=13, title_fontsize=fs, handlelength=1.3, labelspacing=0.3,)
 
 #     fig.tight_layout()
 
 
 # # # print(out_df.keys())
 
-# # for dist, distance_df in out_df.groupby("Distance"):
+# # for dist, distance_df in out_df.groupby("BB-type"):
 # #     distance_df = distance_df[np.isclose(distance_df["Loss probability"], 0.55)]
 # #     plt.figure()
 # #     plt.title(f"Runtime for {dist}")
@@ -387,7 +372,7 @@ for method in methods:
 # #     plt.ylabel("Number of occurrences")
 
 
-# for dist, distance_df in out_df.groupby("Distance"):
+# for dist, distance_df in out_df.groupby("BB-type"):
 
 #     probabilities = np.sort(distance_df["Loss probability"].round(2).unique())
 #     runtime_edges = np.histogram_bin_edges(
@@ -438,24 +423,24 @@ for method in methods:
 #     plot_df[col] = pd.to_numeric(plot_df[col], errors="coerce")
 
 # plot_df = (
-#     plot_df.groupby("Distance", as_index=False)[
+#     plot_df.groupby("BB-type", as_index=False)[
 #         [method + " runtime" for method in methods]
 #     ]
 #     .mean()
 # )
 
-# plot_df["Distance"] = 2*plot_df["Distance"] ** 2-2*plot_df["Distance"]+1
+# plot_df["BB-type"] = 2*plot_df["BB-type"] ** 2-2*plot_df["BB-type"]+1
 
 # for j, method in enumerate(methods):
 #     ax.plot(
-#         plot_df["Distance"],
+#         plot_df["BB-type"],
 #         plot_df[method + " runtime"],
 #         marker=markers[j],
 #         linestyle=linestyles[j],
 #         label=method,
 #     )
 
-# ax.set_xlabel("Distance")
+# ax.set_xlabel("BB-type")
 # ax.set_ylabel("Runtime")
 # ax.set_yscale("log")
 # ax.set_title(f"Loss probability = {probability}")

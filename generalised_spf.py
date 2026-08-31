@@ -497,7 +497,7 @@ def generalised_spf_logical_heuristic(tableau, lost_qubits: list,g:int,
     T_clean, logi_commute_clean, logi_anticommute_clean, indices, success = update_T_and_logi_after_loss(T, [X0, Z0], lost_qubits, reduce=row_reduce)
 
     if not success:
-        print('could not clean logical')
+        # print('could not clean logical')
         return result
 
     _, m_remain = T_clean.shape #number of remaining stabilisers changes
@@ -576,7 +576,7 @@ def generalised_spf_logical_heuristic(tableau, lost_qubits: list,g:int,
         Z_short_second = dc.find_short_second_logical_in_coset(T_clean, X_short_first,Z_logical_qubit,additional_logicals, max_iter=max_iter)
 
     if Z_short_second is None:
-        print('could not find Z_short second')
+        # print('could not find Z_short second')
         return result
 
 
