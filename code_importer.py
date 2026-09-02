@@ -144,13 +144,14 @@ def _shift(N):
 def bb_tableau(lm_tuple:tuple):
     """Builds the bivariate bicylce codes from https://arxiv.org/pdf/2308.07915. Returns the stabiliser tableau T"""
 
-    if lm_tuple not in [(3,3), (3,6),(6,6),(9, 6),(6,12),(12,6),(12,12)]:
+    if lm_tuple not in [(3,3), (3,6),(6,6),(9, 6),(6,12),(12,6),(12,12),(15,3)]:
         raise ValueError('lm_tuple must be one of the following: {[(3,3), (3,6),(6,6),(9, 6),(6,12),(12,6),(12,12)]}')
 
     BB_FAMILY= {
     # (l, m): (A_terms, B_terms)   -- IBM-style series, k=12, treewidth Theta(n)
     (6, 6):  ([('x', 3), ('y', 1), ('y', 2)], [('y', 3), ('x', 1), ('x', 2)]),
     (9, 6):  ([('x',3),('y',1),('y',2)], [('y',3),('x',1),('x',2)]),
+    (15,3): ([('x',9),('y',1),('y',2)], [('x',0),('x',2),('x',7)]),
     (6, 12): ([('x', 3), ('y', 1), ('y', 2)], [('y', 3), ('x', 1), ('x', 2)]),
     (12, 12):([('x', 3), ('y', 2), ('y', 7)], [('y', 3), ('x', 1), ('x', 2)]),
     (12, 6): ([('x', 3), ('y', 1), ('y', 2)], [('y', 3), ('x', 1), ('x', 2)]),
