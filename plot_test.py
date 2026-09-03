@@ -59,7 +59,8 @@ a = "no_min"
 #         "2026-08-08",
 #         "2026-08-09"]
 
-dates = ["2026-08-31"]
+# dates = ["2026-08-31"]
+dates = ["2026-09-01", "2026-09-02"]
 out_list = []
 
 # skip_d3_files = ["224415_sc_thres_min_True_1.csv",
@@ -86,7 +87,9 @@ for a in dates:
 
     for file in os.listdir(dir_name):
         if file.endswith(".csv") and "True" in file:
-            if "_3" in file:
+            if "_3" in file or "bb" in file:
+                continue
+            elif "_5" in file or "_17" in file:
                 continue
 
             df = pd.read_csv(os.path.join(dir_name, file), on_bad_lines="skip", engine="python")
@@ -102,11 +105,12 @@ for a in dates:
 out_df = pd.concat(out_list).reset_index(drop=True)
 out_df = out_df.drop(columns=["lost_qubits",
                               'Heuristic X logical', 'Heuristic Z logical',
-                              'g-SPF X logical', 'g-SPF Z logical',
-                              'ILP X logical', 'ILP Z logical'])
+                              'g-SPF X logical', 'g-SPF Z logical',])
+                            #   'ILP X logical', 'ILP Z logical'])
 
 
-methods = ["Heuristic", "ILP", "g-SPF"]
+# methods = ["Heuristic", "ILP", "g-SPF"]
+methods = ["Heuristic", "g-SPF"]
 plots = [" support size", " runtime", " g", " verify"]
 # plots = [" support size"]
 # plots = [" runtime"]
@@ -338,42 +342,42 @@ for method in methods:
     # fig.savefig(os.path.join(dr, f"Threshold_{method}.pdf"), dpi=800, bbox_inches="tight")
 
 
-# # plt.show()
-# fig, ax = plt.subplots(figsize=(7, 5))
+# plt.show()
+fig, ax = plt.subplots(figsize=(7, 5))
 
-# for i, method in enumerate(methods):
-#     if i >0:
-#         continue
-#     for dist, distance_df in out_df.groupby("Distance"):
-#         success_col = method + " success"
+for i, method in enumerate(methods):
+    if i >0:
+        continue
+    for dist, distance_df in out_df.groupby("Distance"):
+        success_col = method + " success"
 
-#         distance_df[success_col] = pd.to_numeric(distance_df[success_col].replace({"True": 1, "False": 0}), errors="coerce")
-#         # distance_df[success_col] = distance_df[success_col].astype(int)
+        distance_df[success_col] = pd.to_numeric(distance_df[success_col].replace({"True": 1, "False": 0}), errors="coerce")
+        # distance_df[success_col] = distance_df[success_col].astype(int)
 
-#         # distance_df = (
-#         #     distance_df.groupby("Loss probability", group_keys=False)
-#         #     .apply(lambda x: x.sample(n=min(len(x), num_shots), random_state=1)))
+        # distance_df = (
+        #     distance_df.groupby("Loss probability", group_keys=False)
+        #     .apply(lambda x: x.sample(n=min(len(x), num_shots), random_state=1)))
 
-#         distance_df = (distance_df.groupby("Loss probability", as_index=False).agg(
-#             success_mean=(success_col, "mean"),
-#             sample_count=(success_col, "count"),).sort_values("Loss probability"))
+        distance_df = (distance_df.groupby("Loss probability", as_index=False).agg(
+            success_mean=(success_col, "mean"),
+            sample_count=(success_col, "count"),).sort_values("Loss probability"))
 
-#         ax.plot(
-#             distance_df["Loss probability"],
-#             distance_df["sample_count"],
-#             marker="o",
-#             label=str(dist),
-#         )
+        ax.plot(
+            distance_df["Loss probability"],
+            distance_df["sample_count"],
+            marker="o",
+            label=str(dist),
+        )
 
-#     ax.set_title(f"Method used: {method}", fontsize=fs)
-#     ax.set_xlabel("Loss probability", fontsize=fs)
-#     ax.set_ylabel("Count", fontsize=fs)
-#     # ax.set_yscale("log")
-#     ax.grid(True, which="both", alpha=0.3)
-#     ax.tick_params(axis="both", labelsize=fs)
-#     ax.legend(title="Distance", fontsize=13, title_fontsize=fs, handlelength=1.3, labelspacing=0.3,)
+    ax.set_title(f"Method used: {method}", fontsize=fs)
+    ax.set_xlabel("Loss probability", fontsize=fs)
+    ax.set_ylabel("Count", fontsize=fs)
+    # ax.set_yscale("log")
+    ax.grid(True, which="both", alpha=0.3)
+    ax.tick_params(axis="both", labelsize=fs)
+    ax.legend(title="Distance", fontsize=13, title_fontsize=fs, handlelength=1.3, labelspacing=0.3,)
 
-#     fig.tight_layout()
+    fig.tight_layout()
 
 
 # # # print(out_df.keys())

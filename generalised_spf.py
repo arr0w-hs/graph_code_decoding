@@ -15,7 +15,7 @@ def gspf_ilp(tableau : np.ndarray, xlogical: list,
                     measurements : list[list], lost_qubits : list,
                     g : int,
                     target_qubit = None,
-                    max_time = 600,
+                    max_time = 6000,
                     minimise_support = True):
     """
     Find a logical satisfying g-SPF algebra of GF2.
@@ -327,7 +327,7 @@ def update_target_after_losses(target_qubit, indices, num_qubits):
     if target_qubit is not None:
         assert target_qubit < num_qubits, f"Target qubit must be in range 0 - {num_qubits-1}"
         if target_qubit not in indices: # target qubit lost
-            print("target qubit lost")
+            # print("target qubit lost")
             return False
         else:
             target_reduced = int(np.where(indices == target_qubit)[0][0])
@@ -424,7 +424,7 @@ def generalised_spf_logical(tableau : np.ndarray,
 
     target_reduced = update_target_after_losses(target_qubit, indices, num_qubits)
     if target_reduced is False:
-        print("target qubit lost")
+        # print("target qubit lost")
         return result, early_flag, time.time() - t1
 
     meas_reduced = update_measurements_after_losses(measurements, lost_qubits, m)
@@ -449,7 +449,7 @@ def generalised_spf_logical(tableau : np.ndarray,
 
 
 def generalised_spf_logical_heuristic(tableau, lost_qubits: list,g:int,
-                    target_qubit: int = None,anti_commut_iter: int = 10,
+                    target_qubit: int = None,anti_commut_iter: int = 20,
                     correct_for_lost_indices: bool = True,
                     max_iter: int = 100,row_reduce:bool=False,logical_qubit:int=0):
     #logical_qubit: which of the logical qubits to choose from, by default 0

@@ -42,7 +42,7 @@ m = ["Heuristic" ,"g-SPF" ,"ILP"]
 # m = ['Heuristic']
 code = "sc"
 code = "rsc"
-code = "bb"
+# code = "bb"
 
 num_shots = 1
 gg = 1
@@ -59,9 +59,8 @@ lost_prob = np.linspace(0,1,1)
 
 ms = True
 out_dict = defaultdict(list)
-# for i in [3,5,]:
-for i in bb_tuples[4:5]:
-    seen = set()
+for i in [7]:
+# for i in bb_tuples[4:5]:
     cache = []
     fail_list = []
 
@@ -82,6 +81,8 @@ for i in bb_tuples[4:5]:
     for p in lost_prob:
         print('p: ',p)
         support_list = []
+        seen = set()
+
         # hits = 0
         # solves = 0
         # success = 0
@@ -89,6 +90,7 @@ for i in bb_tuples[4:5]:
         lost_mask = sample_lost_masks(num_qubits, p, int(num_shots), exclude=target_qubit)
 
         for shot in range(num_shots):
+
 
             # print("shot: ",shot)
 
@@ -124,6 +126,7 @@ for i in bb_tuples[4:5]:
             res_heu = generalised_spf_logical_heuristic(T, lq, gg,target_qubit=target_qubit) # this assumes no meas have happened
             rt_heu = (time.time()-t1)
             print("heu", rt_heu)
+            # print(res_heu)
             supp = sc.pair_support(res_heu["x"], res_heu["z"], target_qubit, size=True)
             test = test_gspf(T, res_heu["x"], res_heu["z"], [], lq, g =gg)
             out_dict["Heuristic success"].append(res_heu['success'])
@@ -143,6 +146,7 @@ for i in bb_tuples[4:5]:
             res_gspf, ea_flag, rt_early = generalised_spf_logical(T, [], lq, gg, target_qubit=target_qubit, minimise_support=ms)
             rt_gspf = (time.time()-t2)
             print("gsf",rt_gspf)
+            # print(res_gspf)
             supp = sc.pair_support(res_gspf["x"], res_gspf["z"], target_qubit, size=True)
             test = test_gspf(T, res_gspf["x"], res_gspf["z"], [], lq, g =gg)
             out_dict["g-SPF success"].append(res_gspf['success'])
@@ -160,36 +164,39 @@ for i in bb_tuples[4:5]:
                 out_dict["g-SPF g"].append(a)
 
 
-            T = ta.to_gf2_tableau(T) #is this necessary?
-            _,xlogi,zlogi = sc.initialise_logical_basis(T) #needs to call this function for more than one qubits, otherwise
-            # it is not guaranteed that xlogi and zlogic anti-commute
+            # t3 = time.time()
+            # T = ta.to_gf2_tableau(T) #is this necessary?
+            # _,xlogi,zlogi = sc.initialise_logical_basis(T) #needs to call this function for more than one qubits, otherwise
+            # # it is not guaranteed that xlogi and zlogic anti-commute
 
-            t3 = time.time()
-            res_ilp = gspf_ilp(T, xlogi, zlogi, [], lq, gg, target_qubit=target_qubit, minimise_support=ms)
-            rt_ilp = (time.time()-t3)
-            print("ilp",rt_ilp)
-            supp = sc.pair_support(res_ilp["x"], res_ilp["z"], target_qubit, size=True)
-            test = test_gspf(T, res_ilp["x"], res_ilp["z"], [], lq, g =gg)
-            out_dict["ILP success"].append(res_ilp['success'])
-            out_dict["ILP verify"].append(test)
-            out_dict['ILP runtime'].append(rt_ilp)
-            out_dict["ILP support size"].append(supp)
-            out_dict["ILP X logical"].append(ta.tableau2paulistring(res_ilp["x"]))
-            out_dict["ILP Z logical"].append(ta.tableau2paulistring(res_ilp["z"]))
-            a = ta.qubit_wise_commutation(res_ilp["x"], res_ilp["z"])
-            if a is not None:
-                out_dict["ILP g"].append(len(a))
-            else:
-                out_dict["ILP g"].append(a)
+            # res_ilp = gspf_ilp(T, xlogi, zlogi, [], lq, gg, target_qubit=target_qubit, minimise_support=ms)
+            # rt_ilp = (time.time()-t3)
+            # print("ilp",rt_ilp)
+            # # print(res_ilp)
+            # supp = sc.pair_support(res_ilp["x"], res_ilp["z"], target_qubit, size=True)
+            # test = test_gspf(T, res_ilp["x"], res_ilp["z"], [], lq, g =gg)
+            # out_dict["ILP success"].append(res_ilp['success'])
+            # out_dict["ILP verify"].append(test)
+            # out_dict['ILP runtime'].append(rt_ilp)
+            # out_dict["ILP support size"].append(supp)
+            # out_dict["ILP X logical"].append(ta.tableau2paulistring(res_ilp["x"]))
+            # out_dict["ILP Z logical"].append(ta.tableau2paulistring(res_ilp["z"]))
+            # a = ta.qubit_wise_commutation(res_ilp["x"], res_ilp["z"])
+            # if a is not None:
+            #     out_dict["ILP g"].append(len(a))
+            # else:
+            #     out_dict["ILP g"].append(a)
 
 
-            supp = sc.pair_support(res_ilp["x"], res_ilp["z"], target_qubit)
+            supp = sc.pair_support(res_gspf["x"], res_gspf["z"], target_qubit)
             if supp is not None and supp not in cache:
                 cache.append(supp)
 
-            output_path = data_directory / f"{time_str}_{code}_thres_min_{ms}_{gg}.csv"
+            output_path = data_directory / f"{time_str}_{code}_thres_min_{ms}_{gg}_{target_qubit}.csv"
             with output_path.open("w", newline="", encoding="utf-8") as f:
                 # print('writing')
                 writer = csv.writer(f)
                 writer.writerow(out_dict.keys())
                 writer.writerows(zip(*out_dict.values()))
+
+            # print(out_dict)

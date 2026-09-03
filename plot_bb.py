@@ -98,14 +98,14 @@ out_df = out_df[out_df["Loss probability"] <= 1]
 # print(out_df[pd.to_numeric(out_df["BB-type"], errors="coerce").isna()])
 # out_df["BB-type"] = pd.to_numeric(out_df["BB-type"])
 distances = (out_df["BB-type"].unique())
-print(distances)
+# print(distances)
 # print(df[df["BB-type"].isna()])
 
 print(out_df["BB-type"].isna().sum())
-print(len(out_df))
+# print(len(out_df))
 
 nan_rows = out_df[out_df["BB-type"].isna()]
-print(len(nan_rows))
+# print(len(nan_rows))
 
 # for x in out_df["BB-type"].unique():
 #     print(repr(x), type(x))
@@ -114,7 +114,7 @@ for p in plots:
     fig, ax = plt.subplots(figsize=(8.5, 5))
     # out_df["BB-type"] = pd.to_numeric(out_df["BB-type"])
     # distances = sorted(out_df["BB-type"].unique())
-    # distances = sorted(out_df["BB-type"].unique())
+    distances = (out_df["BB-type"].unique())
 
     color_map = {
         distance: plt.cm.tab10(i % 10)
