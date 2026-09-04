@@ -29,7 +29,7 @@ def crazy_graph(width, length, output_node=True):
             (node, output) for node in layers[-1]
         )
 
-    return graph
+    return nx.to_numpy_array(graph, dtype = np.uint16)
 
 def square_lattice(width, length, output_node=True):
     graph = nx.Graph()
@@ -56,7 +56,7 @@ def square_lattice(width, length, output_node=True):
             (node, output) for node in layers[-1]
         )
 
-    return graph
+    return nx.to_numpy_array(graph, dtype = np.uint16)
 
 def hexagonal_lattice(width, length, output_node=True):
     graph = nx.Graph()
@@ -85,7 +85,7 @@ def hexagonal_lattice(width, length, output_node=True):
             (node, output) for node in layers[-1]
         )
 
-    return graph
+    return nx.to_numpy_array(graph, dtype = np.uint16)
 
 def triangular_lattice(
     width,
@@ -130,7 +130,7 @@ def triangular_lattice(
             (node, output) for node in layers[-1]
         )
 
-    return graph
+    return nx.to_numpy_array(graph, dtype = np.uint16)
 
 def tree_to_tree_graph(branches, depth):
     graph = nx.Graph()
@@ -173,7 +173,7 @@ def tree_to_tree_graph(branches, depth):
 
         current_layer = new_layer
 
-    return graph
+    return nx.to_numpy_array(graph, dtype = np.uint16)
 
 
 def sample_lost_nodes(in_adj : np.ndarray , loss_probability):
@@ -196,30 +196,30 @@ def sample_lost_nodes(in_adj : np.ndarray , loss_probability):
 
 
 
-def create_graph_code_based_on_spf(in_adj : np.array, code_node : int = 0):
-    """create a graph code from an input graph
-    using the 0th node as the input node"""
+# def create_graph_code_based_on_spf(in_adj : np.array, code_node : int = 0):
+#     """create a graph code from an input graph
+#     using the 0th node as the input node"""
 
-    num_nodes = in_adj.shape[0]
-    identity = np.identity(num_nodes, dtype = np.uint16)
-    gen = np.hstack([identity, in_adj])
-    zlogi = gen[code_node].copy()
+#     num_nodes = in_adj.shape[0]
+#     identity = np.identity(num_nodes, dtype = np.uint16)
+#     gen = np.hstack([identity, in_adj])
+#     zlogi = gen[code_node].copy()
 
-    neigh = [i for i, ele in enumerate(in_adj[code_node]) if ele ==1]
-    assert(len(neigh)>0)
+#     neigh = [i for i, ele in enumerate(in_adj[code_node]) if ele ==1]
+#     assert(len(neigh)>0)
 
-    xlogi = np.zeros(2*num_nodes, dtype = np.uint16)
-    xlogi[num_nodes+code_node] = 1
-
-
-    rows_to_remove = [code_node]
-    gen = np.delete(gen, rows_to_remove, axis=0)
-    # gen = np.delete(gen, [code_node, code_node+num_nodes], axis=1)
-    # xlogi = np.delete(xlogi, [code_node, code_node+num_nodes])#, axis=1)
-    # zlogi = np.delete(zlogi, [code_node, code_node+num_nodes])#, axis=1)
+#     xlogi = np.zeros(2*num_nodes, dtype = np.uint16)
+#     xlogi[num_nodes+code_node] = 1
 
 
-    return xlogi, zlogi, gen
+#     rows_to_remove = [code_node]
+#     gen = np.delete(gen, rows_to_remove, axis=0)
+#     # gen = np.delete(gen, [code_node, code_node+num_nodes], axis=1)
+#     # xlogi = np.delete(xlogi, [code_node, code_node+num_nodes])#, axis=1)
+#     # zlogi = np.delete(zlogi, [code_node, code_node+num_nodes])#, axis=1)
+
+
+#     return xlogi, zlogi, gen
 
 if __name__ == "__main__":
     from stabiliser_code import create_graph_code

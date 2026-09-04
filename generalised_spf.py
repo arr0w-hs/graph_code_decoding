@@ -221,7 +221,8 @@ def gspf_ilp(tableau : np.ndarray, xlogical: list,
 
     solver = cp_model.CpSolver()
     solver.parameters.max_time_in_seconds = max_time
-    #solver.parameters.num_search_workers = min(8, os.cpu_count() or 1)
+    # solver.parameters.num_search_workers = min(8, os.cpu_count())
+    solver.parameters.num_search_workers =  2
 
     status = solver.Solve(model)
 
@@ -542,7 +543,7 @@ def generalised_spf_logical_heuristic(tableau, lost_qubits: list,g:int,
         remaining_logicals=additional_logicals, o=target_reduced, max_iter=max_iter) #finds logical anti_commuting with Z
 
     if X_short_first is None: #decoder failed
-        print("no short X found")
+        # print("no short X found")
         return result
 
 

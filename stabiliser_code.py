@@ -9,9 +9,13 @@ from ortools.sat.python import cp_model
 
 
 
-def create_graph_code(in_adj : np.array, code_node : int = 0):
+def create_graph_code(in_adj : np.array, code_node : int = 0, spf = False):
     """create a graph code from an input graph
-    using the 0th node as the input node"""
+    using the 0th node as the input node
+
+    if spf is True, creates the graph code similar to cascaded graph
+    as used in the SPF paper: does not measure out the input qubit
+    """
 
     num_nodes = in_adj.shape[0]
     identity = np.identity(num_nodes, dtype = np.uint16)
@@ -28,6 +32,9 @@ def create_graph_code(in_adj : np.array, code_node : int = 0):
 
     rows_to_remove = [code_node, neigh[0]]
     gen = np.delete(gen, rows_to_remove, axis=0)
+
+    if spf:
+        return xlogi, zlogi, gen
 
     gen = np.delete(gen, [code_node, code_node+num_nodes], axis=1)
     xlogi = np.delete(xlogi, [code_node, code_node+num_nodes])#, axis=1)
