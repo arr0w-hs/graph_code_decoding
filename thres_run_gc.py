@@ -44,7 +44,7 @@ code = "hex"
 code = "tri"
 code = "crazy"
 
-num_shots = 20
+num_shots = 200
 gg = 1
 lost_prob = np.linspace(0,1,11)
 # print(list(lost_prob))
@@ -58,10 +58,10 @@ lost_prob = np.linspace(0,1,11)
 
 
 ms = True
-spf_like = True
+spf_like = False
 out_dict = defaultdict(list)
 
-for i in [3]:
+for i in [3,4,5]:
     print(i)
     cache = []
     fail_list = []
@@ -195,7 +195,7 @@ for i in [3]:
             if supp is not None and supp not in cache:
                 cache.append(supp)
 
-            output_path = data_directory / f"{time_str}_{code}_thres_min_{ms}_{gg}_{target_qubit}.csv"
+            output_path = data_directory / f"{time_str}_{code}_thres_min_{ms}_{gg}.csv"
             with output_path.open("w", newline="", encoding="utf-8") as f:
                 # print('writing')
                 writer = csv.writer(f)

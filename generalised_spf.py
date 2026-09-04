@@ -222,7 +222,7 @@ def gspf_ilp(tableau : np.ndarray, xlogical: list,
     solver = cp_model.CpSolver()
     solver.parameters.max_time_in_seconds = max_time
     # solver.parameters.num_search_workers = min(8, os.cpu_count())
-    solver.parameters.num_search_workers =  2
+
 
     status = solver.Solve(model)
 
