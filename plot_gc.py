@@ -26,34 +26,64 @@ def mer_edge(ele):
     g.add_edges_from(ele)
     return g.number_of_edges()
 
+def frozenset_size(x):
+    x = str(x).strip()
+
+    if x == "frozenset()":
+        return 0
+
+    inside = x.removeprefix("frozenset({").removesuffix("})")
+    return len(inside.split(","))
+
+def weighted_mean(in_df):
+
+    values = in_df[success_col]
+
+    in_df["weight_col"] = in_df['Loss probability']**in_df['loss_size'] * (
+         1-in_df['Loss probability'])**(in_df["Distance"]**2 - in_df['loss_size'])
+
+    weights = in_df["weight_col"]
+
+    weighted_sum = (values * weights).sum()
+    total_weight = weights.sum()
+
+    return weighted_sum / total_weight
+
+
 
 form = "pdf"
-
 fs = 15
 dr = os.path.join(dr, "threshold_folder")
 
 a = "minimise"
 a = "no_min"
-dates = ["2026-09-04"]
+dates = ["2026-09-06", "2026-09-07"]
 out_list = []
+b = "crazy"
+b = "tri"
 
 for a in dates:
     dir_name = os.path.join(dr, a)
     for file in os.listdir(dir_name):
         if file.endswith(".csv") and "True" in file:
-            if "crazy" not in file and "tree" not in file and "hex" not in file:
+            if b not in file:# and "tree" not in file and "hex" not in file:
                 continue
+
+            # if "14" not in file:
+            #     continue
 
             df = pd.read_csv(os.path.join(dir_name, file), on_bad_lines="skip", engine="python")
             out_list.append(df)
 
 out_df = pd.concat(out_list).reset_index(drop=True)
+
+out_df["loss_size"] = out_df["lost_qubits"].apply(frozenset_size)
 out_df = out_df.drop(columns=["lost_qubits",
                               'Heuristic X logical', 'Heuristic Z logical',
-                              'g-SPF X logical', 'g-SPF Z logical',])
+                              'g-SPF X logical', 'g-SPF Z logical',"Heuristic verify", "early runtime"])
                             #   'ILP X logical', 'ILP Z logical'])
 
-print(out_df)
+# print(out_df)
 
 # methods = ["Heuristic", "ILP", "g-SPF"]
 methods = ["Heuristic", "g-SPF"]
@@ -61,26 +91,38 @@ plots = [" support size", " runtime", " g", " verify"]
 
 linestyles = ["-", "-", ":", ","]
 colour = ["#AF4189", "#4171B0", "#4DB041", "#B08A41", "#5B4052"]
-colour = ["#CC332D", "#61A6E9","#8B7970", "#276D60", "#DDDFB0", "#FFDDCC", "#594D47"]
-markers = [".", "v", "^", "D", "s", "P", "X", "*"]
+colour = ["#CC332D", "#61A6E9","#8B7970", "#276D60", "#02AB99", "#868D00", "#FFDDCC", "#594D47"]
+markers = ["o", "v", "^", "D", "s", "P", "X", "*"]
 
 out_df["Loss probability"] = pd.to_numeric(out_df["Loss probability"], errors="coerce")
 out_df = out_df[out_df["Loss probability"] <= 1]
 
 
 
+####%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%####
+####%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%####
+#                    Threshold                         #
+####%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%####
+####%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%####
 for i, method in enumerate(methods):
     fig, ax = plt.subplots(figsize=(7, 5))
     for dist, distance_df in out_df.groupby("Distance"):
         j = dist-3
         success_col = method + " success"
+        distance_df["Loss probability"] = distance_df["Loss probability"].round(4)
+
         distance_df[success_col] = pd.to_numeric(distance_df[success_col].replace({"True": 1, "False": 0}), errors="coerce")
+
+        # distance_df = (
+        #     distance_df.groupby("Loss probability", as_index=False)
+        #     .agg(
+        #         success_mean=(success_col, "mean"))
+        #     .sort_values("Loss probability")
+        # )
         distance_df = (
-            distance_df.groupby("Loss probability", as_index=False)
-            .agg(
-                success_mean=(success_col, "mean"),
-                sample_count=(success_col, "count"),
-            )
+            distance_df.groupby("Loss probability")
+            .apply(weighted_mean)
+            .reset_index(name="success_mean")
             .sort_values("Loss probability")
         )
 
@@ -89,7 +131,7 @@ for i, method in enumerate(methods):
             distance_df["success_mean"],
             linestyle=linestyles[i],
             marker=markers[i],
-            label=f"{dist}",
+            label=f"Channel is {dist}x{dist}",
             color = colour[j]
         )
 
@@ -100,13 +142,18 @@ for i, method in enumerate(methods):
     # ax.set_yscale("log")
     ax.grid(True, which="both", alpha=0.3)
     ax.tick_params(axis="both", labelsize=fs)
-    ax.legend(title="Distance", fontsize=13, title_fontsize=fs, handlelength=1.3, labelspacing=0.3,)
+    ax.legend(title="Channel", fontsize=13, title_fontsize=fs, handlelength=1.3, labelspacing=0.3,)
 
     fig.tight_layout()
 
-    # fig.savefig(os.path.join(dr, f"Thresholds_{method}.pdf"), dpi=800, bbox_inches="tight")
+    # fig.savefig(os.path.join(dr, f"Thresholds_{method}_{b}.pdf"), dpi=800, bbox_inches="tight")
 
 
+####%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%####
+####%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%####
+#                     Runtime                          #
+####%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%####
+####%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%####
 fig, ax = plt.subplots(figsize=(7, 5))
 for i, method in enumerate(methods):
     for dist, distance_df in out_df.groupby("Distance"):

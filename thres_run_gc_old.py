@@ -1,4 +1,5 @@
 import time
+import random
 from pathlib import Path
 import numpy as np
 import csv
@@ -9,11 +10,11 @@ import pandas as pd
 from generalised_spf import generalised_spf_logical, gspf_ilp ,generalised_spf_logical_heuristic
 import stabiliser_code as sc
 import tableau as ta
-from code_importer import rotated_surface_code, surface_code,bb_tableau
+from spf_graphs import crazy_graph, hexagonal_lattice, triangular_lattice
 from collections import defaultdict
 from gspf_tests import test_gspf
 
-
+time.sleep(random.uniform(1, 100))
 
 def sample_lost_masks(num_qubits, p, num_shots = 1, exclude=None, rng=None):
 
@@ -23,13 +24,14 @@ def sample_lost_masks(num_qubits, p, num_shots = 1, exclude=None, rng=None):
     lost_masks = rng.random(size = (num_shots, num_qubits)) < p
 
     if exclude is not None:
-        lost_masks[:, exclude] = False
+        for qu in exclude:
+            lost_masks[:, qu] = False
 
     # lost_qubits = np.flatnonzero(lost_masks)
 
     return lost_masks
 
-
+#----------------------------------------------------PARAMETERS----------------------------------------------------------------------------------#
 ts = pd.Timestamp.now(tz="Europe/Stockholm")
 date_str = ts.strftime("%Y-%m-%d")
 time_str = ts.strftime("%H%M%S")
@@ -40,46 +42,53 @@ bb_tuples=[(6,6), (15,3), (9,6), (12,6),]#, (12,12)]
 m = ["Heuristic" ,"g-SPF" ,"ILP"]
 m = ["Heuristic" ,"g-SPF" ,"ILP"]
 # m = ['Heuristic']
-code = "sc"
-code = "rsc"
-# code = "bb"
+code = "hex"
+code = "tri"
+code = "crazy"
 
-num_shots = 1
+num_shots = 10000
 gg = 1
-lost_prob = np.linspace(0,1,0)
+lost_prob = np.linspace(0,1,21)
+#----------------------------------------------------PARAMETERS----------------------------------------------------------------------------------#
+
+
 
 ms = True
+spf_like = True
 out_dict = defaultdict(list)
-# for i in [7]:
-for i in bb_tuples[2:3]:
-    print(i)
+
+for i in [3,]:
+    # print(i)
     cache = []
     fail_list = []
 
-    if code == "bb":
-        _,_,H,_,_ = bb_tableau(i)
+    if code == "hex":
+        graph = hexagonal_lattice(i,i)
+    elif code == "tri":
+        graph = triangular_lattice(i,i)
+    elif code == "crazy":
+        graph = crazy_graph(i,i)
 
-    elif code == "rsc":
-        _,_,H,_,_ = rotated_surface_code(i)
-    elif code == "sc":
-        _,_,H,_,_ = surface_code(i)
+    xl, zl, H = sc.create_graph_code(graph, spf=spf_like)
 
     T = ta.to_gf2_tableau(H)
-    target_qubit = None
     num_qubits=T.shape[1]//2
+    target_qubit = num_qubits-1
     k = num_qubits - T.shape[0]
-    print(f"number of physical qubits: {num_qubits}")
-    print(f"number of logical qubits: {k}")
+    # print(f"number of physical qubits: {num_qubits}")
+    # print(f"number of logical qubits: {k}")
     for p in lost_prob:
         print('p: ',p)
         support_list = []
         seen = set()
 
+        #p+=0.05
+
         # hits = 0
         # solves = 0
         # success = 0
         # num_runs = 0
-        lost_mask = sample_lost_masks(num_qubits, p, int(num_shots), exclude=target_qubit)
+        lost_mask = sample_lost_masks(num_qubits, p, int(num_shots), exclude=[0,target_qubit])
 
         for shot in range(num_shots):
 
@@ -117,7 +126,7 @@ for i in bb_tuples[2:3]:
             t1 = time.time()
             res_heu = generalised_spf_logical_heuristic(T, lq, gg,target_qubit=target_qubit) # this assumes no meas have happened
             rt_heu = (time.time()-t1)
-            print("heu", rt_heu)
+            # print("heu", rt_heu)
             # print(res_heu)
             supp = sc.pair_support(res_heu["x"], res_heu["z"], target_qubit, size=True)
             test = test_gspf(T, res_heu["x"], res_heu["z"], [], lq, g =gg)
@@ -137,7 +146,7 @@ for i in bb_tuples[2:3]:
             t2 = time.time()
             res_gspf, ea_flag, rt_early = generalised_spf_logical(T, [], lq, gg, target_qubit=target_qubit, minimise_support=ms)
             rt_gspf = (time.time()-t2)
-            print("gsf",rt_gspf)
+            # print("gsf",rt_gspf)
             # print(res_gspf)
             supp = sc.pair_support(res_gspf["x"], res_gspf["z"], target_qubit, size=True)
             test = test_gspf(T, res_gspf["x"], res_gspf["z"], [], lq, g =gg)
@@ -164,7 +173,7 @@ for i in bb_tuples[2:3]:
 
             # res_ilp = gspf_ilp(T, xlogi, zlogi, [], lq, gg, target_qubit=target_qubit, minimise_support=ms)
             # rt_ilp = (time.time()-t3)
-            # print("ilp",rt_ilp)
+            # # print("ilp",rt_ilp)
             # # print(res_ilp)
             # supp = sc.pair_support(res_ilp["x"], res_ilp["z"], target_qubit, size=True)
             # test = test_gspf(T, res_ilp["x"], res_ilp["z"], [], lq, g =gg)
@@ -185,7 +194,7 @@ for i in bb_tuples[2:3]:
             if supp is not None and supp not in cache:
                 cache.append(supp)
 
-            output_path = data_directory / f"{time_str}_{code}_thres_min_{ms}_{gg}_{target_qubit}.csv"
+            output_path = data_directory / f"{time_str}_{code}_thres_min_{spf_like}_{gg}.csv"
             with output_path.open("w", newline="", encoding="utf-8") as f:
                 # print('writing')
                 writer = csv.writer(f)

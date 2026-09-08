@@ -54,11 +54,11 @@ def create_graph_code(in_adj : np.array, code_node : int = 0, spf = False):
     if spf:
         xlogi = np.zeros(2*num_nodes, dtype = np.uint16)
         xlogi[num_nodes+code_node] = 1
-
-
         rows_to_remove = [code_node]
         gen = np.delete(gen, rows_to_remove, axis=0)
+
         return xlogi, zlogi, gen
+
 
     zlogi[code_node] = 0
     xlogi = gen[neigh[0]].copy()
