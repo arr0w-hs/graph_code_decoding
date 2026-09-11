@@ -14,23 +14,20 @@ from spf_graphs import crazy_graph, hexagonal_lattice, triangular_lattice
 from collections import defaultdict
 from gspf_tests import test_gspf
 import argparse
+from collections import Counter
+
 
 time.sleep(random.uniform(1, 100))
 
 
 def sample_lost_masks(num_qubits, p, num_shots = 1, exclude=None, rng=None):
-
     rng = np.random.default_rng(rng)
-
     # independent Bernoulli(p) loss per qubit
     lost_masks = rng.random(size = (num_shots, num_qubits)) < p
-
     if exclude is not None:
         for qu in exclude:
             lost_masks[:, qu] = False
-
     # lost_qubits = np.flatnonzero(lost_masks)
-
     return lost_masks
 
 
@@ -97,49 +94,52 @@ T = ta.to_gf2_tableau(H)
 num_qubits=T.shape[1]//2
 target_qubit = num_qubits-1
 k = num_qubits - T.shape[0]
-# print(f"number of physical qubits: {num_qubits}")
-# print(f"number of logical qubits: {k}")
+print(f"number of physical qubits: {num_qubits}")
+print(f"number of logical qubits: {k}")
+
 for p in lost_prob:
     # print('p: ',p)
     support_list = []
     seen = set()
 
+    config_counts = Counter()
 
     lost_mask = sample_lost_masks(num_qubits, p, int(num_shots), exclude=[0,target_qubit])
 
     for shot in range(num_shots):
-
         lq = np.flatnonzero(lost_mask[shot])
-        lost_set = frozenset(int(c) for c in lq)
+        lq = [int(q) for q in lq]
+        lost_qubits = frozenset(lq)
+        config_counts[lost_qubits] += 1
 
-        if lost_set in seen:
-            continue
 
-        seen.add(lost_set)
+    for lq, count in config_counts.items():
 
+        lq = np.array(list(lq), dtype=int)
         out_dict["Distance"].append(code_size)
         out_dict['Loss probability'].append(p)
-        out_dict["Shot number"].append(shot)
-        out_dict['lost_qubits'].append(lost_set)
+        # out_dict["Shot number"].append(shot)
+        out_dict['lost_qubits'].append(lq)
+        out_dict["config_count"].append(count)
 
-        t1 = time.time()
-        res_heu = generalised_spf_logical_heuristic(T, lq, gg,target_qubit=target_qubit) # this assumes no meas have happened
-        rt_heu = (time.time()-t1)
-        # print("heu", rt_heu)
-        # print(res_heu)
-        supp = sc.pair_support(res_heu["x"], res_heu["z"], target_qubit, size=True)
-        test = test_gspf(T, res_heu["x"], res_heu["z"], [], lq, g =gg)
-        out_dict["Heuristic success"].append(res_heu['success'])
-        out_dict["Heuristic verify"].append(test)
-        out_dict['Heuristic runtime'].append(rt_heu)
-        out_dict["Heuristic support size"].append(supp)
-        out_dict["Heuristic X logical"].append(ta.tableau2paulistring(res_heu["x"]))
-        out_dict["Heuristic Z logical"].append(ta.tableau2paulistring(res_heu["z"]))
-        a = ta.qubit_wise_commutation(res_heu["x"], res_heu["z"])
-        if a is not None:
-            out_dict["Heuristic g"].append(len(a))
-        else:
-            out_dict["Heuristic g"].append(a)
+        # t1 = time.time()
+        # res_heu = generalised_spf_logical_heuristic(T, lq, gg,target_qubit=target_qubit) # this assumes no meas have happened
+        # rt_heu = (time.time()-t1)
+        # # print("heu", rt_heu)
+        # # print(res_heu)
+        # supp = sc.pair_support(res_heu["x"], res_heu["z"], target_qubit, size=True)
+        # test = test_gspf(T, res_heu["x"], res_heu["z"], [], lq, g =gg)
+        # out_dict["Heuristic success"].append(res_heu['success'])
+        # out_dict["Heuristic verify"].append(test)
+        # out_dict['Heuristic runtime'].append(rt_heu)
+        # out_dict["Heuristic support size"].append(supp)
+        # out_dict["Heuristic X logical"].append(ta.tableau2paulistring(res_heu["x"]))
+        # out_dict["Heuristic Z logical"].append(ta.tableau2paulistring(res_heu["z"]))
+        # a = ta.qubit_wise_commutation(res_heu["x"], res_heu["z"])
+        # if a is not None:
+        #     out_dict["Heuristic g"].append(len(a))
+        # else:
+        #     out_dict["Heuristic g"].append(a)
 
 
         t2 = time.time()

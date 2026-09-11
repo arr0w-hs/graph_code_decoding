@@ -60,7 +60,7 @@ a = "no_min"
 #         "2026-08-09"]
 
 # dates = ["2026-08-31"]
-dates = ["2026-09-01", "2026-09-02"]
+dates = [ "2026-09-09"]
 out_list = []
 
 # skip_d3_files = ["224415_sc_thres_min_True_1.csv",
@@ -90,6 +90,8 @@ for a in dates:
             if "_3" in file or "bb" in file:
                 continue
             elif "_5" in file or "_17" in file:
+                continue
+            elif "_crazy" in file or "_tri" in file:
                 continue
 
             df = pd.read_csv(os.path.join(dir_name, file), on_bad_lines="skip", engine="python")
@@ -151,6 +153,8 @@ for p in plots:
 
 
     for i, (distance, distance_df) in enumerate(out_df.groupby("Distance")):
+        if distance!=5:
+            continue
         distance_df = distance_df.copy()
         # print(distance_df.keys())
         for method in methods:
@@ -468,3 +472,41 @@ for i, method in enumerate(methods):
 
 
 plt.show()
+
+
+# for i, method in enumerate(methods):
+
+#     fig, ax = plt.subplots(figsize=(7, 5))
+
+#     for dist, distance_df in out_df.groupby("Distance"):
+
+#         j = dist - 3
+#         success_col = method + " success"
+
+#         distance_df = distance_df.copy()
+
+#         distance_df["Loss probability"] = distance_df["Loss probability"].round(4)
+
+#         distance_df[success_col] = pd.to_numeric(
+#             distance_df[success_col].replace({"True": 1, "False": 0}),
+#             errors="coerce"
+#         )
+
+#         distance_df = (
+#             distance_df.groupby("Loss probability")
+#             .apply(
+#                 lambda x: (x[success_col] * x["config_count"]).sum()
+#                           / x["config_count"].sum()
+#             )
+#             .reset_index(name="success_mean")
+#             .sort_values("Loss probability")
+#         )
+
+#         ax.plot(
+#             distance_df["Loss probability"],
+#             distance_df["success_mean"],
+#             linestyle=linestyles[i],
+#             marker=markers[i],
+#             label=f"Channel is {dist}x{dist}",
+#             color=colour[j]
+#         )

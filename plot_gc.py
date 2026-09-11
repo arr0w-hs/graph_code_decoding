@@ -35,21 +35,12 @@ def frozenset_size(x):
     inside = x.removeprefix("frozenset({").removesuffix("})")
     return len(inside.split(","))
 
-def weighted_mean(in_df):
+def weighted_mean(group):
 
-    values = in_df[success_col]
-
-    in_df["weight_col"] = in_df['Loss probability']**in_df['loss_size'] * (
-         1-in_df['Loss probability'])**(in_df["Distance"]**2 - in_df['loss_size'])
-
-    weights = in_df["weight_col"]
-
-    weighted_sum = (values * weights).sum()
-    total_weight = weights.sum()
-
-    return weighted_sum / total_weight
-
-
+    return (
+        (group[success_col] * group["config_count"]).sum()
+        / group["config_count"].sum()
+    )
 
 form = "pdf"
 fs = 15
@@ -57,7 +48,8 @@ dr = os.path.join(dr, "threshold_folder")
 
 a = "minimise"
 a = "no_min"
-dates = ["2026-09-06", "2026-09-07"]
+# dates = ["2026-09-06", "2026-09-07"]
+dates = ["2026-09-08", "2026-09-09"]
 out_list = []
 b = "crazy"
 b = "tri"
@@ -69,24 +61,30 @@ for a in dates:
             if b not in file:# and "tree" not in file and "hex" not in file:
                 continue
 
-            # if "14" not in file:
+            # if "16"  in file:
             #     continue
-
             df = pd.read_csv(os.path.join(dir_name, file), on_bad_lines="skip", engine="python")
             out_list.append(df)
 
 out_df = pd.concat(out_list).reset_index(drop=True)
 
-out_df["loss_size"] = out_df["lost_qubits"].apply(frozenset_size)
-out_df = out_df.drop(columns=["lost_qubits",
-                              'Heuristic X logical', 'Heuristic Z logical',
-                              'g-SPF X logical', 'g-SPF Z logical',"Heuristic verify", "early runtime"])
+# out_df["loss_size"] = out_df["lost_qubits"].apply(frozenset_size)
+# out_df = out_df.drop(columns=["lost_qubits",
+#                               'Heuristic X logical', 'Heuristic Z logical',
+#                               'g-SPF X logical', 'g-SPF Z logical',"Heuristic verify", "early runtime"
+#                               ,"early flag", "g-SPF support size", "g-SPF g", "Heuristic success",
+#                               "g-SPF status", "Heuristic runtime"])
                             #   'ILP X logical', 'ILP Z logical'])
+out_df = out_df.drop(columns=["lost_qubits",
+                              'g-SPF X logical', 'g-SPF Z logical',"early runtime"
+                              ,"early flag", "g-SPF support size", "g-SPF g",
+                              "g-SPF status", ])
 
 # print(out_df)
 
 # methods = ["Heuristic", "ILP", "g-SPF"]
-methods = ["Heuristic", "g-SPF"]
+# methods = ["Heuristic", "g-SPF"]
+methods = ["g-SPF"]
 plots = [" support size", " runtime", " g", " verify"]
 
 linestyles = ["-", "-", ":", ","]
@@ -113,12 +111,6 @@ for i, method in enumerate(methods):
 
         distance_df[success_col] = pd.to_numeric(distance_df[success_col].replace({"True": 1, "False": 0}), errors="coerce")
 
-        # distance_df = (
-        #     distance_df.groupby("Loss probability", as_index=False)
-        #     .agg(
-        #         success_mean=(success_col, "mean"))
-        #     .sort_values("Loss probability")
-        # )
         distance_df = (
             distance_df.groupby("Loss probability")
             .apply(weighted_mean)
@@ -137,16 +129,16 @@ for i, method in enumerate(methods):
 
     ax.set_title(f"Method used: {method}", fontsize=fs)
     ax.set_xlabel("Loss probability", fontsize=fs)
-    # ax.set_ylabel("Teleportation rate", fontsize=fs)
-    ax.set_ylabel("Runtime (s)", fontsize=fs)
+    ax.set_ylabel("Success rate", fontsize=fs)
+    # ax.set_ylabel("Runtime (s)", fontsize=fs)
     # ax.set_yscale("log")
-    ax.grid(True, which="both", alpha=0.3)
+    ax.grid(True, which="both", alpha=0.5)
     ax.tick_params(axis="both", labelsize=fs)
     ax.legend(title="Channel", fontsize=13, title_fontsize=fs, handlelength=1.3, labelspacing=0.3,)
 
     fig.tight_layout()
 
-    # fig.savefig(os.path.join(dr, f"Thresholds_{method}_{b}.pdf"), dpi=800, bbox_inches="tight")
+    fig.savefig(os.path.join(dr, f"Thresholds_{method}_{b}.pdf"), dpi=800, bbox_inches="tight")
 
 
 ####%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%####
@@ -185,10 +177,10 @@ for i, method in enumerate(methods):
 
     ax.set_title(f"Distance-5 rotated surface code", fontsize=fs)
     ax.set_xlabel("Loss probability", fontsize=fs)
-    # ax.set_ylabel("Teleportation rate", fontsize=fs)
+    # ax.set_ylabel("Success rate", fontsize=fs)
     ax.set_ylabel("Runtime (s)", fontsize=fs)
     ax.set_yscale("log")
-    ax.grid(True, which="both", alpha=0.3)
+    ax.grid(True, which="both", alpha=0.5)
     ax.tick_params(axis="both", labelsize=fs)
     ax.legend(title="Distance", fontsize=13, title_fontsize=fs, handlelength=1.3, labelspacing=0.3,)
 
@@ -226,10 +218,10 @@ for i, method in enumerate(methods):
 
 #     ax.set_title(f"Runtime rotated surface code", fontsize=fs)
 #     ax.set_xlabel("Distance", fontsize=fs)
-#     # ax.set_ylabel("Teleportation rate", fontsize=fs)
+#     # ax.set_ylabel("Success rate", fontsize=fs)
 #     ax.set_ylabel("Runtime (s)", fontsize=fs)
 #     ax.set_yscale("log")
-#     ax.grid(True, which="both", alpha=0.3)
+#     ax.grid(True, which="both", alpha=0.5)
 #     ax.tick_params(axis="both", labelsize=fs)
 #     ax.legend(title="Distance", fontsize=13, title_fontsize=fs, handlelength=1.3, labelspacing=0.3,)
 
@@ -237,5 +229,34 @@ for i, method in enumerate(methods):
 
 #     # fig.savefig(os.path.join(dr, f"p_0.1.pdf"), dpi=800, bbox_inches="tight")
 
+for i, method in enumerate(methods):
+    if i >0:
+        continue
+    fig, ax = plt.subplots(figsize=(7, 5))
+    for dist, distance_df in out_df.groupby("Distance"):
+        # success_col = method + " success"
+        success_col = method + " runtime"
+        distance_df[success_col] = pd.to_numeric(distance_df[success_col].replace({"True": 1, "False": 0}), errors="coerce")
+        # distance_df = (
+        #     distance_df.groupby("Loss probability", as_index=False)
+        #     .agg(
+        #         success_mean=(success_col, "mean"),
+        #         sample_count=(success_col, "count"),
+        #     )
+        #     .sort_values("Loss probability")
+        # )
+
+        distance_df = distance_df.groupby("Loss probability", as_index=False).sum()
+
+
+        ax.plot(
+            distance_df["Loss probability"],
+            distance_df["config_count"],
+            label=f"{dist}",
+            marker='o',
+        )
+
+    ax.grid(True, which="both", alpha=0.5)
+    ax.legend(title="Distance", fontsize=13, title_fontsize=fs, handlelength=1.3, labelspacing=0.3,)
 
 plt.show()

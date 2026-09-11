@@ -50,16 +50,7 @@ def sample_lost_masks(num_qubits, p, num_shots = 1, exclude=None, rng=None):
 
 parser = argparse.ArgumentParser()
 
-parser.add_argument(
-    "--size",
-    type=int,
-    default=3
-)
-parser.add_argument(
-    "--p_stop",
-    type=float,
-    default=None
-)
+parser.add_argument("--size", type=int, default=3)
 parser.add_argument(
     "--code",
     type=str,
@@ -78,6 +69,7 @@ parser.add_argument(
     default=None,
     help="specify target qubit",
 )
+
 parser.add_argument(
     "--num_shots",
     type=int,
@@ -89,7 +81,6 @@ num_shots = args.num_shots
 code = args.code
 code_size = args.size
 p_add = args.p_add
-p_stop = args.p_stop
 target_qubit = args.target
 
 
@@ -125,8 +116,6 @@ print(f"number of logical qubits: {k}")
 
 for p in lost_prob:
     # print('p: ',p)
-    if p_stop is not None and p>p_stop:
-        continue
     if p>1:
         continue
     support_list = []

@@ -6,6 +6,8 @@ __pycache__/
 .DS_Store
 /plots
 /threshold_folder
+/ms_data
+ms_plot/
 # C extensions
 *.so
 

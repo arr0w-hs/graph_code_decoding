@@ -344,7 +344,7 @@ def generalised_spf_logical(tableau : np.ndarray,
                     g : int,
                     target_qubit:int = None,
                     correct_for_lost_indices:bool=True,
-                    max_time:float = 600,
+                    max_time:float = 6000,
                     minimise_support:bool=True,logical_qubit:int=0):
     """
     Find a logical satisfying g-SPF algebra of GF2.
@@ -450,7 +450,7 @@ def generalised_spf_logical(tableau : np.ndarray,
 
 
 def generalised_spf_logical_heuristic(tableau, lost_qubits: list,g:int,
-                    target_qubit: int = None,anti_commut_iter: int = 20,
+                    target_qubit: int = None, anti_commut_iter: int = 100,
                     correct_for_lost_indices: bool = True,
                     max_iter: int = 100,row_reduce:bool=False,logical_qubit:int=0):
     #logical_qubit: which of the logical qubits to choose from, by default 0
@@ -568,13 +568,20 @@ def generalised_spf_logical_heuristic(tableau, lost_qubits: list,g:int,
                     Z_short_second = None
                     break
 
-                Z_short_second = sc.find_anti_commuting_logi_at_O(T_clean, X_short_first,additional_logicals+[Z_logical_qubit],  target_reduced)
+                Z_short_second = sc.find_anti_commuting_logi_at_O(T_clean,
+                                            X_short_first,
+                                            additional_logicals+[Z_logical_qubit],
+                                            target_reduced)
                 if Z_short_second is not None:
                     break
 
     else:
 
-        Z_short_second = dc.find_short_second_logical_in_coset(T_clean, X_short_first,Z_logical_qubit,additional_logicals, max_iter=max_iter)
+        Z_short_second = dc.find_short_second_logical_in_coset(T_clean,
+                                            X_short_first,
+                                            Z_logical_qubit,
+                                            additional_logicals,
+                                            max_iter=max_iter)
 
     if Z_short_second is None:
         # print('could not find Z_short second')
