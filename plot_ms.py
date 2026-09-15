@@ -60,7 +60,7 @@ def plot_spf_and_gpf_thresholds(in_files, styles, ax, colour):
         ax.plot(spf_x_vals, spf_y_vals, color=colour[i],
                 linestyle='-',
                 # marker = 'v',
-                label="")
+                label="",)
 
 
 if __name__ == '__main__':
@@ -74,10 +74,21 @@ if __name__ == '__main__':
     fig, ax = plt.subplots(figsize=(7, 5))
     if not os.path.exists('ms_plot'):
         os.makedirs('ms_plot')
-    in_files =  \
-        ['ms_data/W2xL2_TriangularLatticeChannel_MW5_10000MC_SPF_TEL_RATE.csv',
-         'ms_data/W3xL3_TriangularLatticeChannel_MW5_10000MC_SPF_TEL_RATE.csv',
-        'ms_data/W4xL4_TriangularLatticeChannel_MW5_10000MC_SPF_TEL_RATE.csv',]
+
+    b = "crazy"
+    b = "tri"
+
+    if b == "tri":
+        in_files =  \
+            ['ms_data/W2xL2_TriangularLatticeChannel_MW5_10000MC_SPF_TEL_RATE.csv',
+             'ms_data/W3xL3_TriangularLatticeChannel_MW5_10000MC_SPF_TEL_RATE.csv',
+            'ms_data/W4xL4_TriangularLatticeChannel_MW5_10000MC_SPF_TEL_RATE.csv',]
+    else:
+        in_files =  \
+            [
+            # 'ms_data/W2xL2_CrazyGraphChannel_MW5_10000MC_SPF_TEL_RATE.csv',
+            #  'ms_data/W3xL3_CrazyGraphChannel_MW5_10000MC_SPF_TEL_RATE.csv',
+            'ms_data/W4xL4_CrazyGraphChannel_MW5_10000MC_SPF_TEL_RATE.csv',]
     styles = [{'color': 'b', 'line': '-', 'label': '$4 \\times 4$'},
               {'color': 'r', 'line': '-', 'label': '$3 \\times 3$'},
               {'color': 'g', 'line': '-', 'label': '$2 \\times 2$'}]
@@ -94,16 +105,21 @@ if __name__ == '__main__':
     a = "minimise"
     a = "no_min"
     # dates = ["2026-09-06", "2026-09-07"]
-    dates = ["2026-09-08", "2026-09-09"]
+    dates = ["2026-09-08", "2026-09-09", "2026-09-10", "2026-09-11"]
     out_list = []
-    b = "crazy"
-    b = "tri"
+
+    if b =="crazy":
+        cc = "Crazy"
+    elif b == "tri":
+        cc = "Triangular"
 
     for a in dates:
         dir_name = os.path.join(dr, a)
         for file in os.listdir(dir_name):
             if file.endswith(".csv") and "True" in file:
                 if b not in file:# and "tree" not in file and "hex" not in file:
+                    continue
+                if "_None" in file:
                     continue
                 df = pd.read_csv(os.path.join(dir_name, file), on_bad_lines="skip", engine="python")
                 out_list.append(df)
@@ -121,7 +137,7 @@ if __name__ == '__main__':
     linestyles = ["-", "-", ":", ","]
     colour = ["#AF4189", "#4171B0", "#4DB041", "#B08A41", "#5B4052"]
     colour = ["#003809", "#CC332D", "#61A6E9","#8B7970", "#276D60", "#02AB99", "#868D00", "#FFDDCC", "#594D47"]
-    markers = ["o", "v", "^", "D", "s", "P", "X", "*"]
+    markers = ["v", "v", "^", "D", "s", "P", "X", "*"]
 
     out_df["Loss probability"] = pd.to_numeric(out_df["Loss probability"], errors="coerce")
     out_df = out_df[out_df["Loss probability"] <= 1]
@@ -154,7 +170,7 @@ if __name__ == '__main__':
             distance_df["success_mean"],
             # linestyle=linestyles[i],
             linestyle = "--",
-            marker="o",
+            marker="v",
             color = colour[j],
             alpha=0.4,
         )
@@ -164,12 +180,12 @@ if __name__ == '__main__':
             distance_df["success_mean"],
             # linestyle=linestyles[i],
             linestyle = "",
-            marker="o",
+            marker="v",
             label=f"Channel is {dist}x{dist}",
             color = colour[j],
         )
 
-    ax.set_title(f"Threshold comparison", fontsize=fs)
+    ax.set_title(f"{cc} graph channel", fontsize=fs)
     ax.set_xlabel("Loss probability", fontsize=fs)
     ax.set_ylabel("Success rate", fontsize=fs)
     # ax.set_ylabel("Runtime (s)", fontsize=fs)
@@ -185,7 +201,7 @@ if __name__ == '__main__':
 
     # techs = ["PyZX", "Qiskit", "Pauli gadget", "Raw"]
     techs = ["Morley-Short et al.", 'This work']
-    markers = ['', 'o']
+    markers = ['', 'v']
     lines = ['-', '--']
     tech_handles = [
         Line2D(
@@ -237,5 +253,5 @@ if __name__ == '__main__':
         frameon=True,
     )
 
-    fig.savefig(os.path.join(dr, f"Thresholds_method_{b}.pdf"), dpi=800, bbox_inches="tight")
+    # fig.savefig(os.path.join(dr, f"Thresholds_method_{b}.pdf"), dpi=800, bbox_inches="tight")
     plt.show()

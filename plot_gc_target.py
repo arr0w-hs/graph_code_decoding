@@ -42,15 +42,15 @@ dr = os.path.join(dr, "threshold_folder")
 a = "minimise"
 a = "no_min"
 # dates = ["2026-09-01", "2026-09-02"]
-dates = ["2026-09-09"]
+dates = ["2026-09-09", "2026-09-10", "2026-09-11"]
 out_list = []
 for a in dates:
     dir_name = os.path.join(dr, a)
     for file in os.listdir(dir_name):
         if file.endswith(".csv") and "True" in file:
-            if "_tri" in file or "bb" in file:
+            if "_tri" not in file:
                 continue
-            elif "crazy" in file or "_17" in file:
+            if "None" not in file:
                 continue
 
             df = pd.read_csv(os.path.join(dir_name, file), on_bad_lines="skip", engine="python")
@@ -58,29 +58,33 @@ for a in dates:
 
 out_df = pd.concat(out_list).reset_index(drop=True)
 out_df = out_df.drop(columns=["lost_qubits",
-                              'Heuristic X logical', 'Heuristic Z logical',
-                              'g-SPF X logical', 'g-SPF Z logical',])
+                              'g-SPF X logical', 'g-SPF Z logical',"early runtime"
+                              ,"early flag", "g-SPF support size", "g-SPF g",
+                              "g-SPF status", ])
                             #   'ILP X logical', 'ILP Z logical'])
 
 out_list = []
 for a in dates:
     dir_name = os.path.join(dr, a)
     for file in os.listdir(dir_name):
-        if file.endswith(".csv") and "True" in file:
-            if "_17" not in file:
+        if file.endswith(".csv"):
+            if "tri" not in file:
                 continue
+            if "None" in file:
+                continue
+
             df = pd.read_csv(os.path.join(dir_name, file), on_bad_lines="skip", engine="python")
             out_list.append(df)
 
 
 target_df = pd.concat(out_list).reset_index(drop=True)
 target_df = target_df.drop(columns=["lost_qubits",
-                              'Heuristic X logical', 'Heuristic Z logical',
-                              'g-SPF X logical', 'g-SPF Z logical',])
+                              'g-SPF X logical', 'g-SPF Z logical',"early runtime"
+                              ,"early flag", "g-SPF support size", "g-SPF g",
+                              "g-SPF status", ])
                             #   'ILP X logical', 'ILP Z logical'])
 # methods = ["Heuristic", "ILP", "g-SPF"]
-# methods = ["Heuristic", "g-SPF"]
-methods = [ "g-SPF"]
+methods = ["g-SPF"]
 plots = [" support size", " runtime", " g", " verify"]
 
 linestyles = ["-", "-", ":", ","]
@@ -113,8 +117,6 @@ markers = ["v", "v", "^", "D", "s", "P", "X", "*"]
 
 for i, method in enumerate(methods):
     for dist, distance_df in out_df.groupby("Distance"):
-        if dist !=7:
-            continue
         success_col = method + " success"
         distance_df["Loss probability"] = distance_df["Loss probability"].round(4)
         distance_df[success_col] = pd.to_numeric(distance_df[success_col].replace({"True": 1, "False": 0}), errors="coerce")
@@ -135,8 +137,11 @@ for i, method in enumerate(methods):
         )
 
     for dist, distance_df in target_df.groupby("Distance"):
+        if dist !=5:
+            continue
         success_col = method + " success"
 
+        distance_df["Loss probability"] = distance_df["Loss probability"].round(4)
         distance_df[success_col] = pd.to_numeric(distance_df[success_col].replace({"True": 1, "False": 0}), errors="coerce")
         distance_df = (distance_df.groupby("Loss probability",
                                         as_index=False).agg(success_mean=(success_col, "mean"),
@@ -188,7 +193,7 @@ target_handles = [
 #     for i, method in enumerate(methods)
 # ]
 
-combined_handles = target_handles# + method_handles
+combined_handles = target_handles #+ method_handles
 # target_heading = Line2D(
 #     [], [], linestyle="None", marker=None, label="Target")
 
@@ -212,14 +217,14 @@ legend = ax.legend(
 # legend_texts[0].set_weight("bold")
 # legend_texts[2 + 1].set_weight("bold")
 
-ax.set_title(f"Distance-7 rotated surface code", fontsize=fs)
+ax.set_title(f"5x5 triangular graph channel", fontsize=fs)
 ax.set_xlabel("Loss probability", fontsize=fs)
 ax.set_ylabel("Success rate", fontsize=fs)
 ax.grid(True, which="both", alpha=0.5)
 ax.tick_params(axis="both", labelsize=fs)
 fig.tight_layout()
 
-fig.savefig(os.path.join(dr, f"Target_{method}.pdf"), dpi=800, bbox_inches="tight")
+fig.savefig(os.path.join(dr, f"Target_{method}_gc.pdf"), dpi=800, bbox_inches="tight")
 
 
 plt.show()

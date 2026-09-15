@@ -8,6 +8,7 @@ __pycache__/
 /threshold_folder
 /ms_data
 ms_plot/
+ms_rt_data/
 # C extensions
 *.so
 

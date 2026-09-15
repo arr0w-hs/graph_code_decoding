@@ -42,6 +42,8 @@ def weighted_mean(group):
         / group["config_count"].sum()
     )
 
+save = True
+# save = False
 form = "pdf"
 fs = 15
 dr = os.path.join(dr, "threshold_folder")
@@ -49,7 +51,7 @@ dr = os.path.join(dr, "threshold_folder")
 a = "minimise"
 a = "no_min"
 # dates = ["2026-09-06", "2026-09-07"]
-dates = ["2026-09-08", "2026-09-09"]
+dates = ["2026-09-08", "2026-09-09", "2026-09-10", "2026-09-11"]
 out_list = []
 b = "crazy"
 b = "tri"
@@ -59,6 +61,8 @@ for a in dates:
     for file in os.listdir(dir_name):
         if file.endswith(".csv") and "True" in file:
             if b not in file:# and "tree" not in file and "hex" not in file:
+                continue
+            if "_None" in file:
                 continue
 
             # if "16"  in file:
@@ -90,11 +94,15 @@ plots = [" support size", " runtime", " g", " verify"]
 linestyles = ["-", "-", ":", ","]
 colour = ["#AF4189", "#4171B0", "#4DB041", "#B08A41", "#5B4052"]
 colour = ["#CC332D", "#61A6E9","#8B7970", "#276D60", "#02AB99", "#868D00", "#FFDDCC", "#594D47"]
-markers = ["o", "v", "^", "D", "s", "P", "X", "*"]
+markers = ["v", "v", "^", "D", "s", "P", "X", "*"]
 
 out_df["Loss probability"] = pd.to_numeric(out_df["Loss probability"], errors="coerce")
 out_df = out_df[out_df["Loss probability"] <= 1]
 
+if b =="crazy":
+    cc = "Crazy"
+elif b == "tri":
+    cc = "Triangular"
 
 
 ####%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%####
@@ -127,7 +135,7 @@ for i, method in enumerate(methods):
             color = colour[j]
         )
 
-    ax.set_title(f"Method used: {method}", fontsize=fs)
+    ax.set_title(f"{cc} graph channel", fontsize=fs)
     ax.set_xlabel("Loss probability", fontsize=fs)
     ax.set_ylabel("Success rate", fontsize=fs)
     # ax.set_ylabel("Runtime (s)", fontsize=fs)
@@ -137,8 +145,8 @@ for i, method in enumerate(methods):
     ax.legend(title="Channel", fontsize=13, title_fontsize=fs, handlelength=1.3, labelspacing=0.3,)
 
     fig.tight_layout()
-
-    fig.savefig(os.path.join(dr, f"Thresholds_{method}_{b}.pdf"), dpi=800, bbox_inches="tight")
+    if save:
+        fig.savefig(os.path.join(dr, f"Thresholds_{method}_{b}.pdf"), dpi=800, bbox_inches="tight")
 
 
 ####%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%####
@@ -185,8 +193,8 @@ for i, method in enumerate(methods):
     ax.legend(title="Distance", fontsize=13, title_fontsize=fs, handlelength=1.3, labelspacing=0.3,)
 
     fig.tight_layout()
-
-    # fig.savefig(os.path.join(dr, f"Runtime_d5.pdf"), dpi=800, bbox_inches="tight")
+    # if save:
+    #     fig.savefig(os.path.join(dr, f"Runtime_d5.pdf"), dpi=800, bbox_inches="tight")
 
 
 # fig, ax = plt.subplots(figsize=(7, 5))
