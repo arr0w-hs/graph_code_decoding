@@ -27,27 +27,39 @@ def mer_edge(ele):
     return g.number_of_edges()
 
 
-def weighted_mean(group):
+def weighted_mean(group, success_col):
 
     return (
         (group[success_col] * group["config_count"]).sum()
         / group["config_count"].sum()
     )
 
-def weighted_sem(group):
+def weighted_sem(group, success_col):
     x = group[success_col].to_numpy()
     w = group["config_count"].to_numpy()
 
-    mean = np.sum(w * x) / np.sum(w)
+    n = np.sum(w)
+    mean = np.sum(w * x) / n
+    # print(n)
+    variance = np.sum(w * (x - mean) ** 2) / (n - 1)
 
-    weighted_variance = (
-        np.sum(w * (x - mean) ** 2)
-        / (np.sum(w) - np.sum(w ** 2) / np.sum(w))
-    )
+    return np.sqrt(variance / n)
 
-    n_eff = np.sum(w) ** 2 / np.sum(w ** 2)
 
-    return np.sqrt(weighted_variance / n_eff)
+# def weighted_sem(group):
+#     x = group[success_col].to_numpy()
+#     w = group["config_count"].to_numpy()
+
+#     mean = np.sum(w * x) / np.sum(w)
+
+#     weighted_variance = (
+#         np.sum(w * (x - mean) ** 2)
+#         / (np.sum(w) - np.sum(w ** 2) / np.sum(w))
+#     )
+
+#     n_eff = np.sum(w) ** 2 / np.sum(w ** 2)
+
+#     return np.sqrt(weighted_variance / n_eff)
 
 form = "pdf"
 save = True
@@ -86,10 +98,11 @@ methods = ["g-SPF", "Heuristic"]
 plots = [" support size", " runtime"]
 
 
-linestyles = ["-", "-", ":", ","]
+linestyles = ["-", "-", ":", "-."]
 colour = ["#AF4189", "#4171B0", "#4DB041", "#B08A41", "#5B4052"]
 colour = ["#CC332D", "#61A6E9","#8B7970", "#276D60", "#DDDFB0", "#FFDDCC", "#594D47"]
 markers = ["o", "v", "^", "D", "s", "P", "X", "*"]
+# markers = [" ", " ", "^", "D", "s", "P", "X", "*"]
 
 out_df["Loss probability"] = pd.to_numeric(out_df["Loss probability"], errors="coerce")
 out_df = out_df[out_df["Loss probability"] <= 1]
@@ -110,25 +123,28 @@ for i, method in enumerate(methods):
         distance_df["Loss probability"] = distance_df["Loss probability"].round(4)
         distance_df[success_col] = pd.to_numeric(distance_df[success_col].replace({"True": 1, "False": 0}), errors="coerce")
 
-        # distance_df = (
-        #     distance_df.groupby("Loss probability", as_index=False)
-        #     .agg(
-        #         success_mean=(success_col, "mean"),
-        #         sample_count=(success_col, "count"),
-        #     )
-        #     .sort_values("Loss probability")
-        # )
+        mean_df = (
+            distance_df.groupby("Loss probability")
+            .apply(weighted_mean, success_col, include_groups=False)
+            .reset_index(name=f"success_mean_{method}")
+        )
+
+        sem_df = (
+            distance_df.groupby("Loss probability")
+            .apply(weighted_sem, success_col, include_groups=False)
+            .reset_index(name=f"success_sem_{method}")
+        )
 
         distance_df = (
-            distance_df.groupby("Loss probability")
-            .apply(weighted_mean, include_groups=False)
-            .reset_index(name=f"success_mean_{method}")
+            mean_df
+            .merge(sem_df, on="Loss probability")
             .sort_values("Loss probability")
         )
 
-        ax.plot(
+        ax.errorbar(
             distance_df["Loss probability"],
             distance_df[f"success_mean_{method}"],
+            yerr=distance_df[f"success_sem_{method}"],
             linestyle=linestyles[i],
             marker=markers[i],
             label=f"{dist}",
@@ -173,26 +189,44 @@ for i, method in enumerate(methods):
         #                                 axis=1)
         distance_df = distance_df[distance_df["Heuristic success"]]
         distance_df = distance_df[distance_df["g-SPF success"]]
-
-        distance_df = (
+        # print(distance_df.keys())
+        mean_df = (
             distance_df.groupby("Loss probability")
-            .apply(weighted_mean, include_groups=False)
+            .apply(weighted_mean, success_col, include_groups=False)
             .reset_index(name=f"success_mean")
             .sort_values("Loss probability")
         )
 
-        # print(dist)
-        print(max(distance_df["success_mean"])/(2*dist-1))
-        print(max(distance_df["success_mean"]))
+        sem_df = (
+            distance_df.groupby("Loss probability")
+            .apply(weighted_sem, success_col, include_groups=False)
+            .reset_index(name=f"success_sem_{method}")
+            .sort_values("Loss probability")
+        )
 
-        ax.plot(
-            distance_df["Loss probability"],
-            distance_df[f"success_mean"],
+        # print(dist)
+        print(max(mean_df["success_mean"])/(2*dist-1))
+        print(max(mean_df["success_mean"]))
+
+        # ax.errorbar(
+        #             distance_df["Loss probability"],
+        #             distance_df[f"success_mean_{method}"],
+        #             yerr=distance_df[f"success_sem_{method}"],
+        #             linestyle=linestyles[i],
+        #             marker=markers[i],
+        #             label=f"{dist}",
+        #             color = colour[j]
+        #         )
+
+        ax.errorbar(
+            mean_df["Loss probability"],
+            mean_df[f"success_mean"],
             # distance_df[f"success_mean"],
+            yerr=sem_df[f"success_sem_{method}"],
             linestyle=linestyles[i],
             marker=markers[i],
             label=f"{method}",
-            color = colour[i]
+            color = colour[i],
         )
 
     ax.set_xticks(np.arange(0, 1.1, 0.1))
@@ -222,36 +256,49 @@ for i, method in enumerate(methods):
         s = 0.2
         if prob != s:
             continue
-        # success_col = method + " success"
-        # distance_df["Loss probability"] = distance_df["Loss probability"].round(4)
-
         distance_df[success_col] = pd.to_numeric(distance_df[success_col].replace({"True": 1, "False": 0}), errors="coerce")
-
-        # distance_df[success_col] = distance_df.apply(lambda row: (row[success_col]*row[method+" success"]
-        #                                                     if row[method+" success"] is True
-        #                                                     else 0),
-        #                                 axis=1)
         distance_df = distance_df[distance_df["Heuristic success"]]
         distance_df = distance_df[distance_df["g-SPF success"]]
-        # distance_df = distance_df[distance_df["Loss probability"] == 0.1]
+        distance_df[success_col] = 100*distance_df[success_col]/(2 * distance_df["Distance"]-1)-100
 
-        distance_df = (
+        # distance_df = distance_df[distance_df["Loss probability"] == 0.1]
+        # distance_df = (
+        #     distance_df.groupby("Distance")
+        #     .apply(weighted_mean, success_col, include_groups=False)
+        #     .reset_index(name=f"success_mean")
+        #     .sort_values("Distance")
+        # )
+        # ax.plot(
+        #     distance_df["Distance"],
+        #     100*distance_df[f"success_mean"]/(2 * distance_df["Distance"]-1)-100,
+        #     # distance_df[f"success_mean"],
+        #     linestyle=linestyles[i],
+        #     marker=markers[i],
+        #     label=f"{method}",
+        #     color = colour[i]
+        # )
+
+        mean_df = (
             distance_df.groupby("Distance")
-            .apply(weighted_mean, include_groups=False)
+            .apply(weighted_mean, success_col, include_groups=False)
             .reset_index(name=f"success_mean")
             .sort_values("Distance")
         )
-
-        # print(dist)
-        # print(distance_df["Loss probability"])
-        ax.plot(
-            distance_df["Distance"],
-            100*distance_df[f"success_mean"]/(2 * distance_df["Distance"]-1)-100,
+        sem_df = (
+            distance_df.groupby("Distance")
+            .apply(weighted_sem, success_col, include_groups=False)
+            .reset_index(name=f"success_sem")
+            .sort_values("Distance")
+        )
+        ax.errorbar(
+            mean_df["Distance"],
+            mean_df[f"success_mean"],
             # distance_df[f"success_mean"],
+            yerr=sem_df[f"success_sem"],
             linestyle=linestyles[i],
             marker=markers[i],
             label=f"{method}",
-            color = colour[i]
+            color = colour[i],
         )
 
     ax.set_xticks(np.arange(3, 11, 2))
@@ -285,22 +332,46 @@ for i, method in enumerate(methods):
         distance_df["Loss probability"] = distance_df["Loss probability"].round(4)
         distance_df[success_col] = pd.to_numeric(distance_df[success_col].replace({"True": 1, "False": 0}), errors="coerce")
 
-        distance_df = (
-            distance_df.groupby("Loss probability", as_index=False)
-            .agg(
-                success_mean=(success_col, "mean"),
-                sample_count=(success_col, "count"),
-            )
+        # distance_df = distance_df[distance_df["early flag"] == False]
+
+        # distance_df = (
+        #     distance_df.groupby("Loss probability", as_index=False)
+        #     .agg(
+        #         success_mean=(success_col, "mean"),
+        #         sample_count=(success_col, "count"),
+        #     )
+        #     .sort_values("Loss probability")
+        # )
+        # ax.plot(
+        #     distance_df["Loss probability"],
+        #     distance_df[f"success_mean"],
+        #     linestyle=linestyles[i],
+        #     marker=markers[i],
+        #     label=f"{method}",
+        #     color = colour[i]
+        # )
+
+
+        mean_df = (
+            distance_df.groupby("Loss probability")
+            .apply(weighted_mean, success_col, include_groups=False)
+            .reset_index(name=f"success_mean")
             .sort_values("Loss probability")
         )
-
-        ax.plot(
-            distance_df["Loss probability"],
-            distance_df[f"success_mean"],
+        sem_df = (
+            distance_df.groupby("Loss probability")
+            .apply(weighted_sem, success_col, include_groups=False)
+            .reset_index(name=f"success_sem")
+            .sort_values("Loss probability")
+        )
+        ax.errorbar(
+            mean_df["Loss probability"],
+            mean_df[f"success_mean"],
+            yerr=sem_df[f"success_sem"],
             linestyle=linestyles[i],
             marker=markers[i],
             label=f"{method}",
-            color = colour[i]
+            color = colour[i],
         )
 
     ax.set_xticks(np.arange(0, 1.1, 0.1))
@@ -327,29 +398,47 @@ for i, method in enumerate(methods):
     for loss, loss_df in out_df.groupby("Loss probability"):
         if loss > 0.13 or loss < 0.07:
             continue
-        # print(loss)
-        # j = dist//2-1
-        # success_col = method + " success"
         success_col = method + " runtime"
 
-        distance_df["Loss probability"] = distance_df["Loss probability"].round(4)
+        loss_df["Loss probability"] = loss_df["Loss probability"].round(4)
         loss_df[success_col] = pd.to_numeric(loss_df[success_col].replace({"True": 1, "False": 0}), errors="coerce")
-        loss_df = (
-            loss_df.groupby("Distance", as_index=False)
-            .agg(
-                success_mean=(success_col, "mean"),
-            )
+        # loss_df = (
+        #     loss_df.groupby("Distance", as_index=False)
+        #     .agg(success_mean=(success_col, "mean"),)
+        #     .sort_values("Distance")
+        # )
+        # ax.plot(
+        #     loss_df["Distance"],
+        #     loss_df["success_mean"],
+        #     linestyle=linestyles[i],
+        #     marker=markers[i],
+        #     label=f"{method}",
+        #     color = colour[i]
+        # )
+
+
+        mean_df = (
+            loss_df.groupby("Distance")
+            .apply(weighted_mean, success_col, include_groups=False)
+            .reset_index(name=f"success_mean")
             .sort_values("Distance")
         )
-
-        ax.plot(
-            loss_df["Distance"],
-            loss_df["success_mean"],
+        sem_df = (
+            loss_df.groupby("Distance")
+            .apply(weighted_sem, success_col, include_groups=False)
+            .reset_index(name=f"success_sem")
+            .sort_values("Distance")
+        )
+        ax.errorbar(
+            mean_df["Distance"],
+            mean_df[f"success_mean"],
+            yerr=sem_df[f"success_sem"],
             linestyle=linestyles[i],
             marker=markers[i],
             label=f"{method}",
-            color = colour[i]
+            color = colour[i],
         )
+
     ax.set_xticks(np.arange(3, 11, 2))
     ax.set_title(f"Runtime rotated surface code", fontsize=fs)
     ax.set_xlabel("Distance", fontsize=fs)
@@ -368,34 +457,34 @@ for i, method in enumerate(methods):
 
 
 
-for i, method in enumerate(methods):
-    if i >0:
-        continue
-    fig, ax = plt.subplots(figsize=(7, 5))
-    for dist, distance_df in out_df.groupby("Distance"):
-        # success_col = method + " success"
-        success_col = method + " runtime"
+# for i, method in enumerate(methods):
+#     if i >0:
+#         continue
+#     fig, ax = plt.subplots(figsize=(7, 5))
+#     for dist, distance_df in out_df.groupby("Distance"):
+#         # success_col = method + " success"
+#         success_col = method + " runtime"
 
-        distance_df["Loss probability"] = distance_df["Loss probability"].round(4)
-        distance_df[success_col] = pd.to_numeric(distance_df[success_col].replace({"True": 1, "False": 0}), errors="coerce")
-        # distance_df = (
-        #     distance_df.groupby("Loss probability", as_index=False)
-        #     .agg(
-        #         success_mean=(success_col, "mean"),
-        #         sample_count=(success_col, "count"),
-        #     )
-        #     .sort_values("Loss probability")
-        # )
+#         distance_df["Loss probability"] = distance_df["Loss probability"].round(4)
+#         distance_df[success_col] = pd.to_numeric(distance_df[success_col].replace({"True": 1, "False": 0}), errors="coerce")
+#         # distance_df = (
+#         #     distance_df.groupby("Loss probability", as_index=False)
+#         #     .agg(
+#         #         success_mean=(success_col, "mean"),
+#         #         sample_count=(success_col, "count"),
+#         #     )
+#         #     .sort_values("Loss probability")
+#         # )
 
-        distance_df = distance_df.groupby("Loss probability", as_index=False).sum()
+#         distance_df = distance_df.groupby("Loss probability", as_index=False).sum()
 
 
-        ax.plot(
-            distance_df["Loss probability"],
-            distance_df["config_count"],
-            label=f"{dist}",
-        )
+#         ax.plot(
+#             distance_df["Loss probability"],
+#             distance_df["config_count"],
+#             label=f"{dist}",
+#         )
 
-    ax.grid(True, which="both", alpha=0.5)
-    ax.legend(title="Distance", fontsize=13, title_fontsize=fs, handlelength=1.3, labelspacing=0.3,)
+#     ax.grid(True, which="both", alpha=0.5)
+#     ax.legend(title="Distance", fontsize=13, title_fontsize=fs, handlelength=1.3, labelspacing=0.3,)
 plt.show()

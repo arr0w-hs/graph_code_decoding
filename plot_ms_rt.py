@@ -40,7 +40,7 @@ def weighted_mean(group):
 
 form = "pdf"
 save = True
-# save = False
+save = False
 
 fs = 15
 dr = os.path.join(dr, "threshold_folder")
@@ -77,7 +77,7 @@ methods = ["g-SPF"]
 plots = [" support size", " runtime"]
 
 
-linestyles = ["-", "-", ":", ","]
+linestyles = ["-", "-", ":", "dashdot"]
 colour = ["#AF4189", "#4171B0", "#4DB041", "#B08A41", "#5B4052"]
 colour = ["#CC332D", "#61A6E9","#8B7970", "#276D60", "#DDDFB0", "#FFDDCC", "#594D47"]
 markers = ["v", "o", "^", "D", "s", "P", "X", "*"]
@@ -150,13 +150,22 @@ out_df["MS runtime"] = out_df["stabiliser_build_t"] + out_df["XZ_list_creation_t
 
 ax.plot(
     out_df["Distance"],
-    out_df["MS runtime"],
+    out_df["stabiliser_build_t"],
     linestyle=linestyles[i],
     marker=markers[1],
-    label=f"Morley Short et al. Build time",
+    label=f"Morley-Short et al. Build time",
     color = colour[1]
 )
 
+
+# ax.plot(
+#     out_df["Distance"],
+#     out_df["XZ_list_creation_time_av"],
+#     linestyle=linestyles[3],
+#     marker=markers[2],
+#     label=f"Morley-Short et al. X,Z list creation time",
+#     color = colour[1]
+# )
 
 
 b = 'crazy'
@@ -211,7 +220,7 @@ ax.set_title(f"Runtime comparison", fontsize=fs)
 ax.set_xlabel("Channel parameter", fontsize=fs)
 # ax.set_ylabel("Success rate", fontsize=fs)
 
-ax.set_ylabel("Runtime (s)", fontsize=fs)
+ax.set_ylabel("Average runtime (s)", fontsize=fs)
 ax.set_yscale("log")
 ax.grid(True, which="both", alpha=0.5)
 ax.tick_params(axis="both", labelsize=fs)
