@@ -25,14 +25,26 @@ def frozenset_size(x):
     inside = x.removeprefix("frozenset({").removesuffix("})")
     return len(inside.split(","))
 
-def weighted_mean(group):
+def weighted_mean(group, success_col):
 
     return (
         (group[success_col] * group["config_count"]).sum()
         / group["config_count"].sum()
     )
 
-def plot_spf_and_gpf_thresholds(in_files, styles, ax, colour):
+def weighted_sem(group, success_col):
+    x = group[success_col].to_numpy()
+    w = group["config_count"].to_numpy()
+
+    n = np.sum(w)
+    mean = np.sum(w * x) / n
+    # print(n)
+    variance = np.sum(w * (x - mean) ** 2) / (n - 1)
+
+    return np.sqrt(variance / n)
+
+
+def plot_spf_and_gpf_thresholds(in_files, styles, ax, colour, b):
     """
         Plots SPF and GPF teleportation lattice channel rates across given
         sizes.
@@ -44,6 +56,8 @@ def plot_spf_and_gpf_thresholds(in_files, styles, ax, colour):
     # fig, ax = plt.subplots()
     # Plots input datasets
     for i, spf_in_file in enumerate(in_files):
+        if b=="crazy":
+            i+=2
         spf_in_file=base_dir/spf_in_file
 
         # Reads in CSV data into pandas dataframe object
@@ -57,7 +71,9 @@ def plot_spf_and_gpf_thresholds(in_files, styles, ax, colour):
         spf_y_errs = np.array(spf_df.prob_tel_std)
         # gpf_y_errs = np.array(gpf_df.prob_tel_std)
         # Plots SPF and GPF lines
-        ax.plot(spf_x_vals, spf_y_vals, color=colour[i],
+        ax.errorbar(spf_x_vals, spf_y_vals,
+                    yerr = spf_y_errs,
+                color=colour[i],
                 linestyle='-',
                 # marker = 'v',
                 label="",)
@@ -105,7 +121,8 @@ if __name__ == '__main__':
     a = "minimise"
     a = "no_min"
     # dates = ["2026-09-06", "2026-09-07"]
-    dates = ["2026-09-08", "2026-09-09", "2026-09-10", "2026-09-11"]
+    dates = ["2026-09-08", "2026-09-09", "2026-09-10", "2026-09-11",
+            "2026-09-18"]
     out_list = []
 
     if b =="crazy":
@@ -135,14 +152,10 @@ if __name__ == '__main__':
     plots = [" support size", " runtime", " g", " verify"]
 
     linestyles = ["-", "-", ":", ","]
-    colour = ["#AF4189", "#4171B0", "#4DB041", "#B08A41", "#5B4052"]
     colour = ["#003809", "#CC332D", "#61A6E9","#8B7970", "#276D60", "#02AB99", "#868D00", "#FFDDCC", "#594D47"]
-    markers = ["v", "v", "^", "D", "s", "P", "X", "*"]
 
     out_df["Loss probability"] = pd.to_numeric(out_df["Loss probability"], errors="coerce")
     out_df = out_df[out_df["Loss probability"] <= 1]
-
-
 
     ####%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%####
     ####%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%####
@@ -152,56 +165,98 @@ if __name__ == '__main__':
     # for i, method in enumerate(methods):
     method = 'g-SPF'
     for dist, distance_df in out_df.groupby("Distance"):
+
         j = dist-2
+
         success_col = method + " success"
         distance_df["Loss probability"] = distance_df["Loss probability"].round(4)
 
         distance_df[success_col] = pd.to_numeric(distance_df[success_col].replace({"True": 1, "False": 0}), errors="coerce")
 
-        distance_df = (
+        # distance_df = (
+        #     distance_df.groupby("Loss probability")
+        #     .apply(weighted_mean, success_col, include_groups=False)
+        #     .reset_index(name="success_mean")
+        #     .sort_values("Loss probability")
+        # )
+        # ax.plot(
+        #     distance_df["Loss probability"],
+        #     distance_df["success_mean"],
+        #     # linestyle=linestyles[i],
+        #     linestyle = "--",
+        #     marker="v",
+        #     color = colour[j],
+        #     alpha=0.4,
+        # )
+        # ax.plot(
+        #     distance_df["Loss probability"],
+        #     distance_df["success_mean"],
+        #     # linestyle=linestyles[i],
+        #     linestyle = "",
+        #     marker="v",
+        #     label=f"Channel is {dist}x{dist}",
+        #     color = colour[j],
+        # )
+
+
+        mean_df = (
             distance_df.groupby("Loss probability")
-            .apply(weighted_mean)
-            .reset_index(name="success_mean")
+            .apply(weighted_mean, success_col, include_groups=False)
+            .reset_index(name=f"success_mean_{method}")
+        )
+
+        sem_df = (
+            distance_df.groupby("Loss probability")
+            .apply(weighted_sem, success_col, include_groups=False)
+            .reset_index(name=f"success_sem_{method}")
+        )
+
+        distance_df = (
+            mean_df
+            .merge(sem_df, on="Loss probability")
             .sort_values("Loss probability")
         )
 
-        ax.plot(
+        ax.errorbar(
             distance_df["Loss probability"],
-            distance_df["success_mean"],
-            # linestyle=linestyles[i],
-            linestyle = "--",
-            marker="v",
-            color = colour[j],
-            alpha=0.4,
+            distance_df[f"success_mean_{method}"],
+            yerr=distance_df[f"success_sem_{method}"],
+            linestyle="--",
+            marker='o',
+            alpha = 0.4,
+            color = colour[j]
         )
 
-        ax.plot(
+
+        ax.errorbar(
             distance_df["Loss probability"],
-            distance_df["success_mean"],
+            distance_df[f"success_mean_{method}"],
+            yerr=distance_df[f"success_sem_{method}"],
             # linestyle=linestyles[i],
             linestyle = "",
-            marker="v",
-            label=f"Channel is {dist}x{dist}",
+            marker="o",
+            label=f"{dist}x{dist}",
             color = colour[j],
         )
 
-    ax.set_title(f"{cc} graph channel", fontsize=fs)
+
+    ax.set_title(f"{cc} lattice graph", fontsize=fs)
     ax.set_xlabel("Loss probability", fontsize=fs)
     ax.set_ylabel("Success rate", fontsize=fs)
     # ax.set_ylabel("Runtime (s)", fontsize=fs)
     # ax.set_yscale("log")
     ax.grid(True, which="both", alpha=0.5)
     ax.tick_params(axis="both", labelsize=fs)
-    ax.legend(title="Channel", fontsize=13, title_fontsize=fs, handlelength=1.3, labelspacing=0.3,)
+    # ax.legend(title="Channel", fontsize=13, title_fontsize=fs, handlelength=1.3, labelspacing=0.3,)
 
     fig.tight_layout()
 
 
-    plot_spf_and_gpf_thresholds(in_files, styles, ax, colour)
+    plot_spf_and_gpf_thresholds(in_files, styles, ax, colour,b)
 
     # techs = ["PyZX", "Qiskit", "Pauli gadget", "Raw"]
-    techs = ["Morley-Short et al.", 'This work']
-    markers = ['', 'v']
+    techs = ["Morley-Short et al.", 'D-LoFi']
+    markers = ['', 'o']
     lines = ['-', '--']
     tech_handles = [
         Line2D(
@@ -215,21 +270,40 @@ if __name__ == '__main__':
         )
         for i, distance in enumerate(techs)
     ]
-    channels = [2,3,4,5,6,7]
-    # Method entries: marker and line style
-    method_handles = [
-        Line2D(
-            [0],
-            [0],
-            color=colour[i],
-            # linestyle=lines[i],
-            linewidth=6.8,
-            # markersize=10.5,
-            marker = '',
-            label=f'Channel {cha}x{cha}',
-        )
-        for i, cha in enumerate(channels)
-    ]
+
+    if b== "tri":
+        channels = [2,3,4,5,6,7]
+        # Method entries: marker and line style
+        method_handles = [
+            Line2D(
+                [0],
+                [0],
+                color=colour[i],
+                # linestyle=lines[i],
+                linewidth=6.8,
+                # markersize=10.5,
+                marker = '',
+                label=f'{cha}x{cha}',
+            )
+            for i, cha in enumerate(channels)
+        ]
+    else:
+        channels = [2,3,4,5,6,7]
+        # Method entries: marker and line style
+        method_handles = [
+            Line2D(
+                [0],
+                [0],
+                color=colour[i],
+                # linestyle=lines[i],
+                linewidth=6.8,
+                # markersize=10.5,
+                marker = '',
+                label=f'{cha}x{cha}',
+            )
+            for i, cha in enumerate(channels)
+        ]
+
 
     legend1 = ax.legend(
         handles=tech_handles,
@@ -253,5 +327,5 @@ if __name__ == '__main__':
         frameon=True,
     )
 
-    # fig.savefig(os.path.join(dr, f"Thresholds_method_{b}.pdf"), dpi=800, bbox_inches="tight")
+    fig.savefig(os.path.join(dr, f"Thresholds_method_{b}.pdf"), dpi=800, bbox_inches="tight")
     plt.show()

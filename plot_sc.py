@@ -46,24 +46,9 @@ def weighted_sem(group, success_col):
     return np.sqrt(variance / n)
 
 
-# def weighted_sem(group):
-#     x = group[success_col].to_numpy()
-#     w = group["config_count"].to_numpy()
-
-#     mean = np.sum(w * x) / np.sum(w)
-
-#     weighted_variance = (
-#         np.sum(w * (x - mean) ** 2)
-#         / (np.sum(w) - np.sum(w ** 2) / np.sum(w))
-#     )
-
-#     n_eff = np.sum(w) ** 2 / np.sum(w ** 2)
-
-#     return np.sqrt(weighted_variance / n_eff)
-
 form = "pdf"
 save = True
-save = False
+# save = False
 
 fs = 15
 dr = os.path.join(dr, "threshold_folder")
@@ -71,7 +56,10 @@ dr = os.path.join(dr, "threshold_folder")
 a = "minimise"
 a = "no_min"
 # dates = ["2026-09-01", "2026-09-02"]
-dates = ["2026-09-09", "2026-09-14", "2026-09-15", ]
+dates = ["2026-09-09", "2026-09-14",
+        "2026-09-15","2026-09-16",
+        "2026-09-18", "2026-09-19"]
+
 out_list = []
 for a in dates:
     dir_name = os.path.join(dr, a)
@@ -91,12 +79,12 @@ out_df = out_df.drop(columns=["lost_qubits",
                               'g-SPF X logical', 'g-SPF Z logical',])
                             #   'ILP X logical', 'ILP Z logical'])
 
+
 # methods = ["Heuristic", "ILP", "g-SPF"]
 # methods = ["Heuristic", "g-SPF"]
 methods = ["g-SPF", "Heuristic"]
 # plots = [" support size", " runtime", " g", " verify"]
 plots = [" support size", " runtime"]
-
 
 linestyles = ["-", "-", ":", "-."]
 colour = ["#AF4189", "#4171B0", "#4DB041", "#B08A41", "#5B4052"]
@@ -150,7 +138,10 @@ for i, method in enumerate(methods):
             label=f"{dist}",
             color = colour[j]
         )
-
+    if method == "Heuristic":
+        method = "H-LoFi"
+    elif method == "g-SPF":
+        method = "D-LoFi"
     ax.set_xticks(np.arange(0, 1.1, 0.1))
     ax.set_title(f"Method used: {method}", fontsize=fs)
     ax.set_xlabel("Loss probability", fontsize=fs)
@@ -171,75 +162,80 @@ for i, method in enumerate(methods):
 #                     Overlap-5
 ####%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%####
 ####%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%####
-codedd = 5
-fig, ax = plt.subplots(figsize=(7, 5))
-for i, method in enumerate(methods):
-    success_col = method + " support size"
-    for dist, distance_df in out_df.groupby("Distance"):
-        if dist!=codedd:
-            continue
-        j = dist//2-1-1
-        # success_col = method + " success"
-        distance_df["Loss probability"] = distance_df["Loss probability"].round(4)
-        distance_df[success_col] = pd.to_numeric(distance_df[success_col].replace({"True": 1, "False": 0}), errors="coerce")
+for codedd in (3,5,7,9):
+    if codedd != 5: continue
+    fig, ax = plt.subplots(figsize=(7, 5))
+    for i, method in enumerate(methods):
+        success_col = method + " support size"
+        for dist, distance_df in out_df.groupby("Distance"):
+            if dist!=codedd: continue
+            j = dist//2-1-1
+            # success_col = method + " success"
+            distance_df["Loss probability"] = distance_df["Loss probability"].round(4)
+            distance_df[success_col] = pd.to_numeric(distance_df[success_col].replace({"True": 1, "False": 0}), errors="coerce")
 
-        # distance_df[success_col] = distance_df.apply(lambda row: (row[success_col]*row[method+" success"]
-        #                                                     if row[method+" success"] is True
-        #                                                     else 0),
-        #                                 axis=1)
-        distance_df = distance_df[distance_df["Heuristic success"]]
-        distance_df = distance_df[distance_df["g-SPF success"]]
-        # print(distance_df.keys())
-        mean_df = (
-            distance_df.groupby("Loss probability")
-            .apply(weighted_mean, success_col, include_groups=False)
-            .reset_index(name=f"success_mean")
-            .sort_values("Loss probability")
-        )
+            distance_df[success_col] = distance_df.apply(lambda row: (row[success_col]*row[method+" success"]
+                                                                if row[method+" success"] is True
+                                                                else 0),
+                                            axis=1)
 
-        sem_df = (
-            distance_df.groupby("Loss probability")
-            .apply(weighted_sem, success_col, include_groups=False)
-            .reset_index(name=f"success_sem_{method}")
-            .sort_values("Loss probability")
-        )
+            distance_df = distance_df[distance_df["Heuristic success"]]
+            distance_df = distance_df[distance_df["g-SPF success"]]
+            # print(distance_df.keys())
+            mean_df = (
+                distance_df.groupby("Loss probability")
+                .apply(weighted_mean, success_col, include_groups=False)
+                .reset_index(name=f"success_mean")
+                .sort_values("Loss probability")
+            )
 
-        # print(dist)
-        print(max(mean_df["success_mean"])/(2*dist-1))
-        print(max(mean_df["success_mean"]))
+            sem_df = (
+                distance_df.groupby("Loss probability")
+                .apply(weighted_sem, success_col, include_groups=False)
+                .reset_index(name=f"success_sem_{method}")
+                .sort_values("Loss probability")
+            )
 
-        # ax.errorbar(
-        #             distance_df["Loss probability"],
-        #             distance_df[f"success_mean_{method}"],
-        #             yerr=distance_df[f"success_sem_{method}"],
-        #             linestyle=linestyles[i],
-        #             marker=markers[i],
-        #             label=f"{dist}",
-        #             color = colour[j]
-        #         )
+            # print(dist)
+            print(max(mean_df["success_mean"])/(2*dist-1))
+            print(max(mean_df["success_mean"]))
 
-        ax.errorbar(
-            mean_df["Loss probability"],
-            mean_df[f"success_mean"],
-            # distance_df[f"success_mean"],
-            yerr=sem_df[f"success_sem_{method}"],
-            linestyle=linestyles[i],
-            marker=markers[i],
-            label=f"{method}",
-            color = colour[i],
-        )
+            # ax.errorbar(
+            #             distance_df["Loss probability"],
+            #             distance_df[f"success_mean_{method}"],
+            #             yerr=distance_df[f"success_sem_{method}"],
+            #             linestyle=linestyles[i],
+            #             marker=markers[i],
+            #             label=f"{dist}",
+            #             color = colour[j]
+            #         )
 
-    ax.set_xticks(np.arange(0, 1.1, 0.1))
-    ax.set_title(f"Distance-{codedd} rotated surface code", fontsize=fs)
-    ax.set_xlabel("Loss probability", fontsize=fs)
-    ax.set_ylabel("Average logical support size", fontsize=fs)
-    ax.grid(True, which="both", alpha=0.5)
-    ax.tick_params(axis="both", labelsize=fs)
-    ax.legend(title="Distance", fontsize=13, title_fontsize=fs, handlelength=1.3, labelspacing=0.3,)
+            if method == "Heuristic":
+                method1 = "H-LoFi"
+            elif method == "g-SPF":
+                method1 = "D-LoFi"
+            ax.errorbar(
+                mean_df["Loss probability"],
+                mean_df[f"success_mean"],
+                # distance_df[f"success_mean"],
+                yerr=sem_df[f"success_sem_{method}"],
+                linestyle=linestyles[i],
+                marker=markers[i],
+                label=f"{method1}",
+                color = colour[i],
+            )
 
-    fig.tight_layout()
-    if save:
-        fig.savefig(os.path.join(dr, f"sup_size_d5.pdf"), dpi=800, bbox_inches="tight")
+        ax.set_xticks(np.arange(0, 1.1, 0.1))
+        ax.set_title(f"Distance-{codedd} rotated surface code", fontsize=fs)
+        ax.set_xlabel("Loss probability", fontsize=fs)
+        ax.set_ylabel("Average logical support size", fontsize=fs)
+        ax.grid(True, which="both", alpha=0.5)
+        ax.tick_params(axis="both", labelsize=fs)
+        ax.legend(title="", fontsize=13, title_fontsize=fs, handlelength=1.3, labelspacing=0.3,)
+
+        fig.tight_layout()
+        if save:
+            fig.savefig(os.path.join(dr, f"sup_size_d5_{codedd}.pdf"), dpi=800, bbox_inches="tight")
 
 
 ####%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%####
@@ -253,12 +249,13 @@ for i, method in enumerate(methods):
     out_df["Loss probability"] = out_df["Loss probability"].round(4)
     for prob, distance_df in out_df.groupby("Loss probability"):
         # j = dist//2-1-1
-        s = 0.2
+        s = 0.15
         if prob != s:
             continue
         distance_df[success_col] = pd.to_numeric(distance_df[success_col].replace({"True": 1, "False": 0}), errors="coerce")
         distance_df = distance_df[distance_df["Heuristic success"]]
         distance_df = distance_df[distance_df["g-SPF success"]]
+
         distance_df[success_col] = 100*distance_df[success_col]/(2 * distance_df["Distance"]-1)-100
 
         # distance_df = distance_df[distance_df["Loss probability"] == 0.1]
@@ -290,6 +287,25 @@ for i, method in enumerate(methods):
             .reset_index(name=f"success_sem")
             .sort_values("Distance")
         )
+
+        if method == "Heuristic":
+            method1 = "H-LoFi"
+        elif method == "g-SPF":
+            method1 = "D-LoFi"
+
+
+        # if i ==0:
+        #     ax.errorbar(
+        #         mean_df["Distance"],
+        #         2*mean_df[f"Distance"]-1,
+        #         # distance_df[f"success_mean"],
+        #         # yerr=sem_df[f"success_sem"],
+        #         linestyle='--',
+        #         marker='s',
+        #         label=f"2d-1",
+        #         color = 'black',
+        #     )
+
         ax.errorbar(
             mean_df["Distance"],
             mean_df[f"success_mean"],
@@ -297,17 +313,19 @@ for i, method in enumerate(methods):
             yerr=sem_df[f"success_sem"],
             linestyle=linestyles[i],
             marker=markers[i],
-            label=f"{method}",
+            label=f"{method1}",
             color = colour[i],
         )
+
 
     ax.set_xticks(np.arange(3, 11, 2))
     ax.set_title(f"Logical support size (p = {s})", fontsize=fs)
     ax.set_xlabel("Distance", fontsize=fs)
     ax.set_ylabel("Increase in average\nsupport size (%)", fontsize=fs)
+    # ax.set_ylabel("Average support size", fontsize=fs)
     ax.grid(True, which="both", alpha=0.5)
     ax.tick_params(axis="both", labelsize=fs)
-    ax.legend(title="Distance", fontsize=13, title_fontsize=fs, handlelength=1.3, labelspacing=0.3,)
+    ax.legend(title="", fontsize=13, title_fontsize=fs, handlelength=1.3, labelspacing=0.3,)
 
     fig.tight_layout()
     if save:
@@ -332,7 +350,7 @@ for i, method in enumerate(methods):
         distance_df["Loss probability"] = distance_df["Loss probability"].round(4)
         distance_df[success_col] = pd.to_numeric(distance_df[success_col].replace({"True": 1, "False": 0}), errors="coerce")
 
-        # distance_df = distance_df[distance_df["early flag"] == False]
+        distance_df = distance_df[distance_df["early flag"] == False]
 
         # distance_df = (
         #     distance_df.groupby("Loss probability", as_index=False)
@@ -364,13 +382,18 @@ for i, method in enumerate(methods):
             .reset_index(name=f"success_sem")
             .sort_values("Loss probability")
         )
+
+        if method == "Heuristic":
+            method1 = "H-LoFi"
+        elif method == "g-SPF":
+            method1 = "D-LoFi"
         ax.errorbar(
             mean_df["Loss probability"],
             mean_df[f"success_mean"],
             yerr=sem_df[f"success_sem"],
             linestyle=linestyles[i],
             marker=markers[i],
-            label=f"{method}",
+            label=f"{method1}",
             color = colour[i],
         )
 
@@ -381,11 +404,11 @@ for i, method in enumerate(methods):
     ax.set_ylabel("Average runtime (s)", fontsize=fs)
     ax.grid(True, which="both", alpha=0.5)
     ax.tick_params(axis="both", labelsize=fs)
-    ax.legend(title="Distance", fontsize=13, title_fontsize=fs, handlelength=1.3, labelspacing=0.3,)
+    ax.legend(title="", fontsize=13, title_fontsize=fs, handlelength=1.3, labelspacing=0.3,)
 
     fig.tight_layout()
     if save:
-        fig.savefig(os.path.join(dr, f"Runtime_d5.pdf"), dpi=800, bbox_inches="tight")
+        fig.savefig(os.path.join(dr, f"Runtime_d5_ef_false.pdf"), dpi=800, bbox_inches="tight")
 
 
 ####%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%####
@@ -396,6 +419,7 @@ for i, method in enumerate(methods):
 fig, ax = plt.subplots(figsize=(7, 5))
 for i, method in enumerate(methods):
     for loss, loss_df in out_df.groupby("Loss probability"):
+        prob_fix = 0.1
         if loss > 0.13 or loss < 0.07:
             continue
         success_col = method + " runtime"
@@ -429,25 +453,30 @@ for i, method in enumerate(methods):
             .reset_index(name=f"success_sem")
             .sort_values("Distance")
         )
+
+        if method == "Heuristic":
+            method1 = "H-LoFi"
+        elif method == "g-SPF":
+            method1 = "D-LoFi"
         ax.errorbar(
             mean_df["Distance"],
             mean_df[f"success_mean"],
             yerr=sem_df[f"success_sem"],
             linestyle=linestyles[i],
             marker=markers[i],
-            label=f"{method}",
+            label=f"{method1}",
             color = colour[i],
         )
 
     ax.set_xticks(np.arange(3, 11, 2))
-    ax.set_title(f"Runtime rotated surface code", fontsize=fs)
+    ax.set_title(f"Runtime (p = {prob_fix})", fontsize=fs)
     ax.set_xlabel("Distance", fontsize=fs)
     # ax.set_ylabel("Success rate", fontsize=fs)
     ax.set_ylabel("Average runtime (s)", fontsize=fs)
     ax.set_yscale("log")
     ax.grid(True, which="both", alpha=0.5)
     ax.tick_params(axis="both", labelsize=fs)
-    ax.legend(title="Distance", fontsize=13, title_fontsize=fs, handlelength=1.3, labelspacing=0.3,)
+    ax.legend(title="", fontsize=13, title_fontsize=fs, handlelength=1.3, labelspacing=0.3,)
 
     fig.tight_layout()
 
@@ -457,34 +486,37 @@ for i, method in enumerate(methods):
 
 
 
-# for i, method in enumerate(methods):
-#     if i >0:
-#         continue
-#     fig, ax = plt.subplots(figsize=(7, 5))
-#     for dist, distance_df in out_df.groupby("Distance"):
-#         # success_col = method + " success"
-#         success_col = method + " runtime"
+for i, method in enumerate(methods):
+    if i >0:
+        continue
+    fig, ax = plt.subplots(figsize=(7, 5))
+    for dist, distance_df in out_df.groupby("Distance"):
+        # if dist <8:continue
+        # success_col = method + " success"
+        success_col = method + " runtime"
 
-#         distance_df["Loss probability"] = distance_df["Loss probability"].round(4)
-#         distance_df[success_col] = pd.to_numeric(distance_df[success_col].replace({"True": 1, "False": 0}), errors="coerce")
-#         # distance_df = (
-#         #     distance_df.groupby("Loss probability", as_index=False)
-#         #     .agg(
-#         #         success_mean=(success_col, "mean"),
-#         #         sample_count=(success_col, "count"),
-#         #     )
-#         #     .sort_values("Loss probability")
-#         # )
+        distance_df["Loss probability"] = distance_df["Loss probability"].round(4)
+        # distance_df = distance_df[distance_df["Loss probability"] <= 0.3]
 
-#         distance_df = distance_df.groupby("Loss probability", as_index=False).sum()
+        distance_df[success_col] = pd.to_numeric(distance_df[success_col].replace({"True": 1, "False": 0}), errors="coerce")
+        # distance_df = (
+        #     distance_df.groupby("Loss probability", as_index=False)
+        #     .agg(
+        #         success_mean=(success_col, "mean"),
+        #         sample_count=(success_col, "count"),
+        #     )
+        #     .sort_values("Loss probability")
+        # )
 
+        distance_df = distance_df.groupby("Loss probability", as_index=False).sum()
+        # print(distance_df[ "config_count"])
 
-#         ax.plot(
-#             distance_df["Loss probability"],
-#             distance_df["config_count"],
-#             label=f"{dist}",
-#         )
+        ax.plot(
+            distance_df["Loss probability"],
+            distance_df["config_count"],
+            label=f"{dist}",
+        )
 
-#     ax.grid(True, which="both", alpha=0.5)
-#     ax.legend(title="Distance", fontsize=13, title_fontsize=fs, handlelength=1.3, labelspacing=0.3,)
-plt.show()
+    ax.grid(True, which="both", alpha=0.5)
+    ax.legend(title="Distance", fontsize=13, title_fontsize=fs, handlelength=1.3, labelspacing=0.3,)
+# plt.show()

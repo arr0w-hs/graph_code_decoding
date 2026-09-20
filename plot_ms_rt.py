@@ -31,16 +31,30 @@ def mer_edge(ele):
     return g.number_of_edges()
 
 
-def weighted_mean(group):
+def weighted_mean(group, success_col):
 
     return (
         (group[success_col] * group["config_count"]).sum()
         / group["config_count"].sum()
     )
 
+def weighted_sem(group, success_col):
+    x = group[success_col].to_numpy()
+    w = group["config_count"].to_numpy()
+
+
+    n = np.sum(w)
+    mean = np.sum(w * x) / n
+    # print(n)
+    variance = np.sum(w * (x - mean) ** 2) / (n - 1)
+
+    return np.sqrt(variance / n)
+
+
+
 form = "pdf"
 save = True
-save = False
+# save = False
 
 fs = 15
 dr = os.path.join(dr, "threshold_folder")
@@ -56,12 +70,19 @@ for a in dates:
         if file.endswith(".csv") and "True" in file:
 
             df = pd.read_csv(os.path.join(dir_name, file), on_bad_lines="skip", engine="python")
-            if "5" in file:
+            if "5." in file:
                 df["Distance"] = int(2)
             elif "10" in file:
                 df["Distance"] = int(3)
             elif "17" in file:
                 df["Distance"] = int(4)
+            elif "26" in file:
+                df["Distance"] = int(5)
+            elif "37" in file:
+                df["Distance"] = int(6)
+            elif "50" in file:
+                df["Distance"] = int(7)
+
             out_list.append(df)
 
 out_df = pd.concat(out_list).reset_index(drop=True)
@@ -69,22 +90,11 @@ out_df = out_df.drop(columns=[
                               'g-SPF X logical', 'g-SPF Z logical',])
                             #   'ILP X logical', 'ILP Z logical'])
 
-# print(out_df)
-# methods = ["Heuristic", "ILP", "g-SPF"]
-# methods = ["Heuristic", "g-SPF"]
-methods = ["g-SPF"]
-# plots = [" support size", " runtime", " g", " verify"]
-plots = [" support size", " runtime"]
-
 
 linestyles = ["-", "-", ":", "dashdot"]
 colour = ["#AF4189", "#4171B0", "#4DB041", "#B08A41", "#5B4052"]
 colour = ["#CC332D", "#61A6E9","#8B7970", "#276D60", "#DDDFB0", "#FFDDCC", "#594D47"]
-markers = ["v", "o", "^", "D", "s", "P", "X", "*"]
-
-# out_df["Loss probability"] = pd.to_numeric(out_df["Loss probability"], errors="coerce")
-# out_df = out_df[out_df["Loss probability"] <= 1]
-
+markers = ["o", "v", "^", "D", "s", "P", "X", "*"]
 
 ####%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%####
 ####%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%####
@@ -95,28 +105,54 @@ fig, ax = plt.subplots(figsize=(7, 5))
 method = 'g-SPF'
 i=0
 success_col = method + " runtime"
-# distance_df["Loss probability"] = distance_df["Loss probability"].round(4)
 out_df[success_col] = pd.to_numeric(out_df[success_col].replace({"True": 1, "False": 0}), errors="coerce")
+out_df["config_count"] = 1
+# out_df = (
+#     out_df.groupby("Distance", as_index=False)
+#     .agg(
+#         success_mean=(success_col, "mean"),
+#     )
+#     .sort_values("Distance")
+# )
+# ax.plot(
+#     out_df["Distance"],
+#     out_df["success_mean"],
+#     linestyle=linestyles[i],
+#     marker=markers[i],
+#     label=f"{method}",
+#     color = colour[i]
+# )
+
+mean_df = (
+    out_df.groupby("Distance")
+    .apply(weighted_mean, success_col, include_groups=False)
+    .reset_index(name=f"success_mean_{method}")
+)
+
+sem_df = (
+    out_df.groupby("Distance")
+    .apply(weighted_sem, success_col, include_groups=False)
+    .reset_index(name=f"success_sem_{method}")
+)
+
 out_df = (
-    out_df.groupby("Distance", as_index=False)
-    .agg(
-        success_mean=(success_col, "mean"),
-    )
+    mean_df
+    .merge(sem_df, on="Distance")
     .sort_values("Distance")
 )
 
-ax.plot(
+ax.errorbar(
     out_df["Distance"],
-    out_df["success_mean"],
+    out_df[f"success_mean_{method}"],
+    yerr=out_df[f"success_sem_{method}"],
     linestyle=linestyles[i],
     marker=markers[i],
-    label=f"{method}",
+    label="D-LoFi",
     color = colour[i]
 )
-
 base_dir = Path(__file__).resolve().parent
 dr = base_dir/"ms_rt_data"
-time_list = ["200805", '200403', ]
+# time_list = ["200805", '200403', ]
 b = 'crazy'
 # b = 'tri'
 out_data = []
@@ -124,8 +160,8 @@ out_dict = defaultdict(list)
 for file in os.listdir(dr):
     if file.endswith(".csv"):
 
-        if "200805" not in file and '200403' not in file:
-            continue
+        # if "200805" not in file and '200403' not in file:
+        #     continue
 
         if "_meta" in file or "_map" in file:
             continue
@@ -141,19 +177,32 @@ for file in os.listdir(dr):
 out_df = pd.concat(out_data).reset_index(drop=True)
 out_df = out_df.drop(columns=['stabiliser_build_timed_out',"xz_reps_requested",
                             'xz_reps_done',
-                            "n_xz_timeouts","XZ_list_creation_time_std"])
-out_df = out_df.drop(index=1)
+                            "n_xz_timeouts",])
+
 out_df = out_df.rename(columns={"n": "Distance"})
 out_df = out_df.sort_values(by="Distance").reset_index(drop=True)
-out_df["MS runtime"] = out_df["stabiliser_build_t"] + out_df["XZ_list_creation_time_av"]
+# out_df["MS runtime"] = out_df["stabiliser_build_t"]
+out_df.drop(out_df[out_df["Distance"] == 1].index, inplace=True)
 
+print(out_df)
 
-ax.plot(
+ax.errorbar(
     out_df["Distance"],
     out_df["stabiliser_build_t"],
     linestyle=linestyles[i],
     marker=markers[1],
     label=f"Morley-Short et al. Build time",
+    color = colour[1]
+)
+
+
+ax.errorbar(
+    out_df["Distance"],
+    out_df["XZ_list_creation_time_av"],
+    yerr = out_df["XZ_list_creation_time_std"]/np.sqrt(1000),
+    linestyle="-.",
+    marker=markers[1],
+    label=f"Morley-Short et al. X,Z list creation time",
     color = colour[1]
 )
 
@@ -175,8 +224,8 @@ out_dict = defaultdict(list)
 for file in os.listdir(dr):
     if file.endswith(".csv"):
 
-        if "200805" not in file and '200403' not in file:
-            continue
+        # if "200805" not in file and '200403' not in file:
+        #     continue
 
         if "_meta" in file or "_map" in file:
             continue
@@ -193,38 +242,39 @@ out_df = pd.concat(out_data).reset_index(drop=True)
 # out_df = out_df.drop(columns=['stabiliser_build_timed_out',"xz_reps_requested",
 #                             'xz_reps_done',
 #                             "n_xz_timeouts","XZ_list_creation_time_std"])
-
-
-out_df = out_df.drop(index=2)
 # print(out_df)
-out_df = out_df.rename(columns={"n": "Distance"})
+
+# out_df = out_df.drop(index=2)
+# print(out_df)
+out_df = out_df.rename(columns={"n_values": "Distance"})
 out_df = out_df.sort_values(by="Distance").reset_index(drop=True)
-out_df["MS find"] = out_df["min_pair_XZ_list_creation_time_av"] + \
-    out_df["min_pair_XZ_list_creation_time_std"]
+# out_df["MS find"] = out_df["av_t_min_per_n"]
+out_df.drop(out_df[out_df["Distance"] == 1].index, inplace=True)
 
-
-ax.plot(
+ax.errorbar(
     out_df["Distance"],
-    out_df["MS find"],
+    out_df["av_t_min_per_n"],
+    yerr = out_df["std_t_min_per_n"]/np.sqrt(1000),
     linestyle='--',
     marker=markers[1],
     label=f"Morley-Short et al. Minimum pair time",
     color = colour[1]
 )
 
+# print(out_df)
 
 
 base_dir = Path(__file__).resolve().parent
-ax.set_xticks([2, 3, 4])
+ax.set_xticks([2, 3, 4,5,6,7])
 ax.set_title(f"Runtime comparison", fontsize=fs)
-ax.set_xlabel("Channel parameter", fontsize=fs)
+ax.set_xlabel("Lattice parameter", fontsize=fs)
 # ax.set_ylabel("Success rate", fontsize=fs)
 
 ax.set_ylabel("Average runtime (s)", fontsize=fs)
 ax.set_yscale("log")
 ax.grid(True, which="both", alpha=0.5)
 ax.tick_params(axis="both", labelsize=fs)
-ax.legend(title="Distance", fontsize=13, title_fontsize=fs, handlelength=1.3, labelspacing=0.3,)
+ax.legend(title="Method", fontsize=13, title_fontsize=fs, handlelength=1.3, labelspacing=0.3,)
 fig.tight_layout()
 if save:
     fig.savefig(os.path.join(base_dir, f"threshold_folder/ms_rt_comparison_crazy.pdf"), dpi=800, bbox_inches="tight")

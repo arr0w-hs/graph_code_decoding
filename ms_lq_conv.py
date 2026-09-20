@@ -16,7 +16,7 @@ base_dir = Path(__file__).resolve().parent
 dr = base_dir/"ms_rt_data"
 
 # date_list = [""]
-time_list = ["200805", '200403', ]
+# time_list = ["200805", '200403', ]
 
 graph_list = []
 df_list = []
@@ -24,7 +24,7 @@ mol_list = []
 out_list = []
 
 b = 'crazy'
-b = 'tri'
+# b = 'tri'
 
 out_dict = defaultdict(list)
 # dir_name = os.path.join(dr, a)
@@ -36,7 +36,7 @@ for file in os.listdir(dr):
 
         if "_meta" in file or "_map" in file:
             continue
-        if "_loss_pattern" not in file:
+        if "_loss_patterns" not in file:
             continue
 
         if b not in file:
